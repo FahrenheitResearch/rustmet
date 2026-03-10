@@ -7,8 +7,11 @@ name = "rustmet"
 version = "0.1.0"
 description = "Fast GRIB2 processor for weather models — pure Rust, 5x faster than cfgrib"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 license = { text = "MIT" }
+authors = [
+    { name = "Drew", email = "drew@fahrenheitresearch.com" },
+]
 keywords = ["grib2", "weather", "meteorology", "hrrr", "gfs", "nam", "rap", "nwp"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -16,7 +19,17 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
 ]
 
 dependencies = [
@@ -25,6 +38,11 @@ dependencies = [
 
 [project.optional-dependencies]
 xarray = ["xarray>=2022.1"]
+
+[project.urls]
+Homepage = "https://github.com/FahrenheitResearch/rustmet"
+Repository = "https://github.com/FahrenheitResearch/rustmet"
+Issues = "https://github.com/FahrenheitResearch/rustmet/issues"
 
 [tool.maturin]
 python-source = "python"

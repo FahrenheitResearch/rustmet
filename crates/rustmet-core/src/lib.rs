@@ -6,6 +6,8 @@
 //! # Quick Start
 //!
 //! ```no_run
+//! # #[cfg(feature = "network")]
+//! # {
 //! use rustmet_core::{grib2, download, models};
 //!
 //! // Create HTTP client and download HRRR 2m temperature
@@ -26,12 +28,18 @@
 //! // Unpack the data values
 //! let values = grib2::unpack_message(&grib.messages[0]).unwrap();
 //! // values is now a Vec<f64> of temperatures in Kelvin
+//! # }
 //! ```
 
+pub mod error;
 pub mod grib2;
+#[cfg(feature = "network")]
 pub mod download;
 pub mod models;
 pub mod products;
 pub mod projection;
 pub mod metfuncs;
 pub mod composite;
+pub mod render;
+
+pub use error::{RustmetError, Result};

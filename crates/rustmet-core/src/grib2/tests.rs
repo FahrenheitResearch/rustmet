@@ -446,7 +446,7 @@ mod tests {
 
         let result = Grib2File::from_bytes(&data);
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.unwrap_err().to_string();
         assert!(
             err.contains("Unsupported GRIB edition"),
             "Expected edition error, got: {}",
@@ -466,7 +466,7 @@ mod tests {
 
         let result = Grib2File::from_bytes(&data);
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.unwrap_err().to_string();
         assert!(
             err.contains("extends beyond"),
             "Expected 'extends beyond' error, got: {}",
@@ -478,6 +478,7 @@ mod tests {
     // Integration test: download real HRRR data (ignored by default)
     // ========================================================================
 
+    #[cfg(feature = "network")]
     #[test]
     #[ignore]
     fn integration_download_and_parse_hrrr_tmp_2m() {

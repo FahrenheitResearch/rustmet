@@ -69,20 +69,20 @@ impl<'a> BitReader<'a> {
 }
 
 /// Unpack a GRIB2 message's data section to floating-point values.
-pub fn unpack_message(msg: &Grib2Message) -> Result<Vec<f64>, String> {
+pub fn unpack_message(msg: &Grib2Message) -> crate::error::Result<Vec<f64>> {
     let dr = &msg.data_rep;
 
     let values = match dr.template {
-        0 => unpack_simple(&msg.raw_data, dr)?,
-        2 => unpack_complex(&msg.raw_data, dr)?,
-        3 => unpack_complex_spatial(&msg.raw_data, dr)?,
-        40 => unpack_jpeg2000(&msg.raw_data, dr)?,
-        41 => unpack_png(&msg.raw_data, dr)?,
+        0 => unpack_simple(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        2 => unpack_complex(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        3 => unpack_complex_spatial(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        40 => unpack_jpeg2000(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        41 => unpack_png(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
         _ => {
-            return Err(format!(
-                "Unsupported data representation template: {}",
-                dr.template
-            ))
+            return Err(crate::RustmetError::UnsupportedTemplate {
+                template: dr.template,
+                detail: "data representation template".to_string(),
+            })
         }
     };
 
@@ -336,10 +336,17 @@ fn unpack_complex_spatial(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f6
     Ok(apply_scaling(&reconstructed, dr))
 }
 
+/// Template 5.40: JPEG2000 packing (stub for platforms without openjp2).
+#[cfg(not(feature = "jpeg2000"))]
+fn unpack_jpeg2000(_data: &[u8], _dr: &DataRepresentation) -> Result<Vec<f64>, String> {
+    Err("JPEG2000 decoding not available (openjp2 feature disabled)".into())
+}
+
 /// Template 5.40: JPEG2000 packing.
 ///
 /// Uses openjp2's C-style API to decode a JPEG2000 codestream embedded in GRIB2 Section 7.
 /// GRIB2 JPEG2000 data is always a raw J2K codestream (starts with FF 4F).
+#[cfg(feature = "jpeg2000")]
 fn unpack_jpeg2000(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> {
     use openjp2::openjpeg::*;
     use std::ffi::c_void;

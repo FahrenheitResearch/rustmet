@@ -235,20 +235,19 @@ fn read_f32(data: &[u8], offset: usize) -> Result<f32, String> {
 
 impl Grib2File {
     /// Open a GRIB2 file from disk and parse it.
-    pub fn open(path: &str) -> Result<Self, String> {
-        let data =
-            std::fs::read(path).map_err(|e| format!("Failed to read {}: {}", path, e))?;
+    pub fn open(path: &str) -> crate::error::Result<Self> {
+        let data = std::fs::read(path)?;
         Self::from_bytes(&data)
     }
 
     /// Alias for `open` for compatibility.
-    pub fn from_path(path: &str) -> Result<Self, String> {
+    pub fn from_path(path: &str) -> crate::error::Result<Self> {
         Self::open(path)
     }
 
     /// Parse all GRIB2 messages from raw bytes.
     /// A GRIB2 file may contain multiple concatenated messages.
-    pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
+    pub fn from_bytes(data: &[u8]) -> crate::error::Result<Self> {
         let mut messages = Vec::new();
         let mut pos = 0;
 
@@ -259,8 +258,9 @@ impl Grib2File {
                 None => break,
             }
 
-            let msg = parse_message(data, pos)?;
-            let total_len = read_u64(data, pos + 8)? as usize;
+            let msg = parse_message(data, pos).map_err(crate::RustmetError::Parse)?;
+            let total_len = read_u64(data, pos + 8)
+                .map_err(crate::RustmetError::Parse)? as usize;
             messages.push(msg);
 
             // Advance past this message

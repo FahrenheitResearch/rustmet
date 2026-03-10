@@ -3739,6 +3739,7 @@ dependencies = [
  "rayon",
  "rustls",
  "rustls-rustcrypto",
+ "thiserror 2.0.18",
  "ureq",
  "webpki-roots 0.26.11",
 ]
@@ -3750,6 +3751,7 @@ dependencies = [
  "chrono",
  "numpy",
  "pyo3",
+ "rayon",
  "rustmet-core",
 ]
 

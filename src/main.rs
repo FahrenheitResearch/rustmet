@@ -148,7 +148,7 @@ fn cmd_plot(
         .map_err(|e| format!("Failed to create output directory '{}': {}", output, e))?;
 
     // Initialize download client and cache
-    let client = download::DownloadClient::new()?;
+    let client = download::DownloadClient::new().map_err(|e| e.to_string())?;
     let cache = download::Cache::new();
 
     // Collect all GRIB2 variable patterns needed across products
@@ -210,9 +210,11 @@ fn cmd_plot(
             let chunk = if *end == u64::MAX {
                 // Last entry - download from start to end of file
                 // Use a large end value; the server will return what's available
-                client.get_range(&grib_url, *start, *start + 50_000_000)?
+                client.get_range(&grib_url, *start, *start + 50_000_000)
+                    .map_err(|e| e.to_string())?
             } else {
-                client.get_range(&grib_url, *start, *end)?
+                client.get_range(&grib_url, *start, *end)
+                    .map_err(|e| e.to_string())?
             };
             cache.put(&range_url, &chunk);
             grib_data.extend_from_slice(&chunk);
@@ -317,7 +319,7 @@ fn cmd_download(
     }
     println!();
 
-    let client = download::DownloadClient::new()?;
+    let client = download::DownloadClient::new().map_err(|e| e.to_string())?;
     let cache = download::Cache::new();
 
     // Parse variable filter patterns
@@ -366,9 +368,11 @@ fn cmd_download(
                     continue;
                 }
                 let chunk = if *end == u64::MAX {
-                    client.get_range(&grib_url, *start, *start + 50_000_000)?
+                    client.get_range(&grib_url, *start, *start + 50_000_000)
+                        .map_err(|e| e.to_string())?
                 } else {
-                    client.get_range(&grib_url, *start, *end)?
+                    client.get_range(&grib_url, *start, *end)
+                        .map_err(|e| e.to_string())?
                 };
                 total_bytes += chunk.len() as u64;
                 cache.put(&range_url, &chunk);
@@ -382,7 +386,7 @@ fn cmd_download(
         } else {
             // Download full file
             println!("[F{:03}] Downloading full GRIB2 file...", fh);
-            let data = client.get_bytes(&grib_url)?;
+            let data = client.get_bytes(&grib_url).map_err(|e| e.to_string())?;
             println!("[F{:03}] Downloaded {} bytes", fh, data.len());
             cache.put(&grib_url, &data);
         }
@@ -413,7 +417,7 @@ fn cmd_info(path: &str) -> Result<(), String> {
     println!("Size: {} bytes ({:.1} MB)", file_size, file_size as f64 / 1_048_576.0);
     println!();
 
-    let grib = grib2::Grib2File::from_path(path)?;
+    let grib = grib2::Grib2File::from_path(path).map_err(|e| e.to_string())?;
 
     if grib.messages.is_empty() {
         println!("No messages found (parser may be stubbed).");
@@ -779,8 +783,8 @@ fn render_grib_product(
         let v_msg = find_msg_by_var(grib, gprod.grib_vars[1])
             .ok_or_else(|| format!("GRIB message not found for '{}'", gprod.grib_vars[1]))?;
 
-        let u_vals = grib2::unpack_message(u_msg)?;
-        let v_vals = grib2::unpack_message(v_msg)?;
+        let u_vals = grib2::unpack_message(u_msg).map_err(|e| e.to_string())?;
+        let v_vals = grib2::unpack_message(v_msg).map_err(|e| e.to_string())?;
 
         // Truncate to expected grid size if needed (spatial differencing artifacts)
         let expected = nx * ny;
@@ -804,7 +808,7 @@ fn render_grib_product(
         // Single-variable product
         let msg = find_msg_by_var(grib, gprod.grib_vars[0])
             .ok_or_else(|| format!("GRIB message not found for '{}'", gprod.grib_vars[0]))?;
-        let raw_values = grib2::unpack_message(msg)?;
+        let raw_values = grib2::unpack_message(msg).map_err(|e| e.to_string())?;
 
         // Unit conversion
         let converted = convert_values(&raw_values, gprod.name, gprod.units);

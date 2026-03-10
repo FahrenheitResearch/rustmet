@@ -2,8 +2,22 @@ pub mod hrrr;
 pub mod gfs;
 pub mod nam;
 pub mod rap;
+pub mod ecmwf;
+pub mod nbm;
+pub mod rrfs;
+pub mod rtma;
+pub mod href;
+#[cfg(feature = "network")]
+pub mod latest;
 
 pub use hrrr::HrrrConfig;
 pub use gfs::GfsConfig;
 pub use nam::NamConfig;
 pub use rap::RapConfig;
+pub use ecmwf::EcmwfConfig;
+pub use nbm::NbmConfig;
+pub use rrfs::RrfsConfig;
+pub use rtma::RtmaConfig;
+pub use href::HrefConfig;
+#[cfg(feature = "network")]
+pub use latest::find_latest_run;

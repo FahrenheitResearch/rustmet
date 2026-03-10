@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/rustmet-core", "crates/rustmet-py"]
+exclude = ["crates/rustmet-wasm"]
 resolver = "2"
 
 [package]

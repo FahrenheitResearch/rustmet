@@ -14,3 +14,4 @@ pyo3 = { version = "0.23", features = ["extension-module"] }
 numpy = "0.23"
 rustmet-core = { path = "../rustmet-core" }
 chrono = "0.4"
+rayon = "1"
