@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use numpy::{PyArray1, PyArray2};
-use rustmet_core::{grib2, download, models};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1};
+use rustmet_core::{grib2, download, models, metfuncs, composite};
 
 // ──────────────────────────────────────────────────────────
 // GribMessage — a single decoded GRIB2 field
@@ -440,6 +440,226 @@ fn model_urls(model: &str, date: &str, hour: u32, product: &str, fhour: u32)
 }
 
 // ──────────────────────────────────────────────────────────
+// Thermodynamic functions (from metfuncs)
+// ──────────────────────────────────────────────────────────
+
+/// LCL temperature from temperature and dewpoint (both Celsius). Returns Celsius.
+#[pyfunction]
+fn lcltemp(t_celsius: f64, td_celsius: f64) -> f64 {
+    metfuncs::lcltemp(t_celsius, td_celsius)
+}
+
+/// Equivalent potential temperature (Celsius).
+/// p_hpa: pressure in hPa, t_celsius: temperature in C, td_celsius: dewpoint in C.
+#[pyfunction]
+fn thetae(p_hpa: f64, t_celsius: f64, td_celsius: f64) -> f64 {
+    metfuncs::thetae(p_hpa, t_celsius, td_celsius)
+}
+
+/// Mixing ratio (g/kg) at given pressure (hPa) and temperature (Celsius).
+#[pyfunction]
+fn mixratio(p_hpa: f64, t_celsius: f64) -> f64 {
+    metfuncs::mixratio(p_hpa, t_celsius)
+}
+
+/// Dewpoint (Celsius) from mixing ratio (kg/kg) and pressure (hPa).
+#[pyfunction]
+fn dewpoint_from_q(q_kgkg: f64, p_hpa: f64) -> f64 {
+    composite::dewpoint_from_q(q_kgkg, p_hpa)
+}
+
+// ──────────────────────────────────────────────────────────
+// Composite severe weather parameters (numpy array functions)
+// ──────────────────────────────────────────────────────────
+
+/// Compute CAPE, CIN, LCL, and LFC for every grid point.
+///
+/// All 3D arrays are flattened [nz][ny][nx]. 2D arrays are [ny][nx].
+/// Returns dict with keys 'cape', 'cin', 'lcl', 'lfc' each as numpy array.
+#[pyfunction]
+#[pyo3(signature = (pressure_3d, temperature_c_3d, qvapor_3d, height_agl_3d, psfc, t2, q2, nx, ny, nz, parcel_type="sb"))]
+fn compute_cape_cin<'py>(
+    py: Python<'py>,
+    pressure_3d: PyReadonlyArray1<f64>,
+    temperature_c_3d: PyReadonlyArray1<f64>,
+    qvapor_3d: PyReadonlyArray1<f64>,
+    height_agl_3d: PyReadonlyArray1<f64>,
+    psfc: PyReadonlyArray1<f64>,
+    t2: PyReadonlyArray1<f64>,
+    q2: PyReadonlyArray1<f64>,
+    nx: usize,
+    ny: usize,
+    nz: usize,
+    parcel_type: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (cape, cin, lcl, lfc) = composite::compute_cape_cin(
+        pressure_3d.as_slice()?,
+        temperature_c_3d.as_slice()?,
+        qvapor_3d.as_slice()?,
+        height_agl_3d.as_slice()?,
+        psfc.as_slice()?,
+        t2.as_slice()?,
+        q2.as_slice()?,
+        nx, ny, nz,
+        parcel_type,
+    );
+    let dict = PyDict::new(py);
+    dict.set_item("cape", PyArray1::from_vec(py, cape))?;
+    dict.set_item("cin", PyArray1::from_vec(py, cin))?;
+    dict.set_item("lcl", PyArray1::from_vec(py, lcl))?;
+    dict.set_item("lfc", PyArray1::from_vec(py, lfc))?;
+    Ok(dict)
+}
+
+/// Compute Storm Relative Helicity (m^2/s^2) for every grid point.
+///
+/// 3D arrays are flattened [nz][ny][nx]. Returns 1D numpy array of size ny*nx.
+#[pyfunction]
+fn compute_srh<'py>(
+    py: Python<'py>,
+    u_3d: PyReadonlyArray1<f64>,
+    v_3d: PyReadonlyArray1<f64>,
+    height_agl_3d: PyReadonlyArray1<f64>,
+    nx: usize,
+    ny: usize,
+    nz: usize,
+    top_m: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_srh(
+        u_3d.as_slice()?,
+        v_3d.as_slice()?,
+        height_agl_3d.as_slice()?,
+        nx, ny, nz,
+        top_m,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Compute bulk wind shear magnitude (m/s) between bottom_m and top_m AGL.
+///
+/// 3D arrays are flattened [nz][ny][nx]. Returns 1D numpy array of size ny*nx.
+#[pyfunction]
+fn compute_shear<'py>(
+    py: Python<'py>,
+    u_3d: PyReadonlyArray1<f64>,
+    v_3d: PyReadonlyArray1<f64>,
+    height_agl_3d: PyReadonlyArray1<f64>,
+    nx: usize,
+    ny: usize,
+    nz: usize,
+    bottom_m: f64,
+    top_m: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_shear(
+        u_3d.as_slice()?,
+        v_3d.as_slice()?,
+        height_agl_3d.as_slice()?,
+        nx, ny, nz,
+        bottom_m, top_m,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Significant Tornado Parameter (STP).
+///
+/// All inputs are 1D numpy arrays of the same size (ny*nx).
+#[pyfunction]
+fn compute_stp<'py>(
+    py: Python<'py>,
+    cape: PyReadonlyArray1<f64>,
+    lcl: PyReadonlyArray1<f64>,
+    srh_1km: PyReadonlyArray1<f64>,
+    shear_6km: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_stp(
+        cape.as_slice()?,
+        lcl.as_slice()?,
+        srh_1km.as_slice()?,
+        shear_6km.as_slice()?,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Energy Helicity Index: EHI = (CAPE * SRH) / 160000.
+///
+/// All inputs are 1D numpy arrays of the same size.
+#[pyfunction]
+fn compute_ehi<'py>(
+    py: Python<'py>,
+    cape: PyReadonlyArray1<f64>,
+    srh: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_ehi(
+        cape.as_slice()?,
+        srh.as_slice()?,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Supercell Composite Parameter: SCP = (MUCAPE/1000) * (SRH_3km/50) * (SHEAR_6km/40).
+///
+/// All inputs are 1D numpy arrays of the same size.
+#[pyfunction]
+fn compute_scp<'py>(
+    py: Python<'py>,
+    mucape: PyReadonlyArray1<f64>,
+    srh_3km: PyReadonlyArray1<f64>,
+    shear_6km: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_scp(
+        mucape.as_slice()?,
+        srh_3km.as_slice()?,
+        shear_6km.as_slice()?,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Lapse rate (C/km) between two heights in km AGL.
+///
+/// 3D arrays are flattened [nz][ny][nx]. Returns 1D numpy array of size ny*nx.
+#[pyfunction]
+fn compute_lapse_rate<'py>(
+    py: Python<'py>,
+    temperature_c_3d: PyReadonlyArray1<f64>,
+    qvapor_3d: PyReadonlyArray1<f64>,
+    height_agl_3d: PyReadonlyArray1<f64>,
+    nx: usize,
+    ny: usize,
+    nz: usize,
+    bottom_km: f64,
+    top_km: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_lapse_rate(
+        temperature_c_3d.as_slice()?,
+        qvapor_3d.as_slice()?,
+        height_agl_3d.as_slice()?,
+        nx, ny, nz,
+        bottom_km, top_km,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Precipitable water (mm).
+///
+/// 3D arrays are flattened [nz][ny][nx]. Returns 1D numpy array of size ny*nx.
+#[pyfunction]
+fn compute_pw<'py>(
+    py: Python<'py>,
+    qvapor_3d: PyReadonlyArray1<f64>,
+    pressure_3d: PyReadonlyArray1<f64>,
+    nx: usize,
+    ny: usize,
+    nz: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = composite::compute_pw(
+        qvapor_3d.as_slice()?,
+        pressure_3d.as_slice()?,
+        nx, ny, nz,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+// ──────────────────────────────────────────────────────────
 // Module definition
 // ──────────────────────────────────────────────────────────
 
@@ -451,6 +671,20 @@ fn _rustmet(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fetch, m)?)?;
     m.add_function(wrap_pyfunction!(open, m)?)?;
     m.add_function(wrap_pyfunction!(products, m)?)?;
+    // Thermodynamic scalar functions
+    m.add_function(wrap_pyfunction!(lcltemp, m)?)?;
+    m.add_function(wrap_pyfunction!(thetae, m)?)?;
+    m.add_function(wrap_pyfunction!(mixratio, m)?)?;
+    m.add_function(wrap_pyfunction!(dewpoint_from_q, m)?)?;
+    // Composite severe weather parameters (numpy array functions)
+    m.add_function(wrap_pyfunction!(compute_cape_cin, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_srh, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_shear, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_stp, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_ehi, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_scp, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_lapse_rate, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_pw, m)?)?;
     m.add("__version__", "0.1.0")?;
     Ok(())
 }

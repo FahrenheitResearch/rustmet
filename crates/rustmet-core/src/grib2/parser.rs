@@ -34,6 +34,13 @@ pub struct GridDefinition {
     pub latin2: f64,
     pub lov: f64,
     pub scan_mode: u8,
+    /// Latitude where Dx and Dy are specified (used by Polar Stereographic, Mercator).
+    pub lad: f64,
+    /// Projection center flag: 0 = North Pole on projection plane,
+    /// 1 = South Pole on projection plane (Polar Stereographic).
+    pub projection_center_flag: u8,
+    /// Number of parallels between a pole and the equator (Gaussian grids).
+    pub n_parallel: u32,
 }
 
 /// Product definition from Section 4.
@@ -85,6 +92,9 @@ impl Default for GridDefinition {
             latin2: 0.0,
             lov: 0.0,
             scan_mode: 0,
+            lad: 0.0,
+            projection_center_flag: 0,
+            n_parallel: 0,
         }
     }
 }
@@ -406,7 +416,10 @@ fn parse_section3(sec: &[u8]) -> Result<GridDefinition, String> {
 
     match template {
         0 => parse_grid_template_0(sec, &mut grid)?,
+        10 => parse_grid_template_10(sec, &mut grid)?,
+        20 => parse_grid_template_20(sec, &mut grid)?,
         30 => parse_grid_template_30(sec, &mut grid)?,
+        40 => parse_grid_template_40(sec, &mut grid)?,
         _ => {
             // For unknown templates, try to extract basic dimensions if possible
             if sec.len() >= 38 {
@@ -464,6 +477,104 @@ fn parse_grid_template_30(sec: &[u8], grid: &mut GridDefinition) -> Result<(), S
     grid.scan_mode = read_u8(sec, 64)?;
     grid.latin1 = read_signed_u32(sec, 65)? as f64 / 1_000_000.0;
     grid.latin2 = read_signed_u32(sec, 69)? as f64 / 1_000_000.0;
+
+    Ok(())
+}
+
+/// Template 3.10: Mercator.
+/// WMO GRIB2 Section 3 Template 3.10 octet layout (1-based octets):
+///   15: shape of earth, 30-33: Ni, 34-37: Nj,
+///   38-41: La1, 42-45: Lo1, 46: resolution flags,
+///   47-50: LaD, 51-54: La2, 55-58: Lo2,
+///   59: scanning mode, 60: grid orientation angle,
+///   61-64: Di (mm), 65-68: Dj (mm)
+/// Offsets below are 0-based within the section bytes.
+fn parse_grid_template_10(sec: &[u8], grid: &mut GridDefinition) -> Result<(), String> {
+    if sec.len() < 72 {
+        return Err("Section 3 template 10 (Mercator) too short".into());
+    }
+
+    grid.nx = read_u32(sec, 30)?;
+    grid.ny = read_u32(sec, 34)?;
+    grid.lat1 = read_signed_u32(sec, 38)? as f64 / 1_000_000.0;
+    grid.lon1 = read_signed_u32(sec, 42)? as f64 / 1_000_000.0;
+    // LaD - latitude where Dx/Dy are specified
+    grid.lad = read_signed_u32(sec, 47)? as f64 / 1_000_000.0;
+    grid.lat2 = read_signed_u32(sec, 51)? as f64 / 1_000_000.0;
+    grid.lon2 = read_signed_u32(sec, 55)? as f64 / 1_000_000.0;
+    grid.scan_mode = read_u8(sec, 59)?;
+    // Di, Dj in millimetres
+    grid.dx = read_u32(sec, 64)? as f64 / 1000.0;
+    grid.dy = read_u32(sec, 68)? as f64 / 1000.0;
+
+    Ok(())
+}
+
+/// Template 3.20: Polar Stereographic.
+/// WMO GRIB2 Section 3 Template 3.20 octet layout (1-based octets):
+///   15: shape of earth, 30-33: Nx, 34-37: Ny,
+///   38-41: La1, 42-45: Lo1, 46: resolution/component flags,
+///   47-50: LaD, 51-54: LoV, 55-58: Dx (mm), 59-62: Dy (mm),
+///   63: projection centre flag, 64: scanning mode
+fn parse_grid_template_20(sec: &[u8], grid: &mut GridDefinition) -> Result<(), String> {
+    if sec.len() < 65 {
+        return Err("Section 3 template 20 (Polar Stereographic) too short".into());
+    }
+
+    grid.nx = read_u32(sec, 30)?;
+    grid.ny = read_u32(sec, 34)?;
+    grid.lat1 = read_signed_u32(sec, 38)? as f64 / 1_000_000.0;
+    grid.lon1 = read_signed_u32(sec, 42)? as f64 / 1_000_000.0;
+    // LaD - true latitude (latitude where Dx/Dy are specified)
+    grid.lad = read_signed_u32(sec, 47)? as f64 / 1_000_000.0;
+    // LoV - orientation longitude (grid vertical longitude)
+    grid.lov = read_signed_u32(sec, 51)? as f64 / 1_000_000.0;
+    // Dx, Dy in millimetres
+    grid.dx = read_u32(sec, 55)? as f64 / 1000.0;
+    grid.dy = read_u32(sec, 59)? as f64 / 1000.0;
+    grid.projection_center_flag = read_u8(sec, 63)?;
+    grid.scan_mode = read_u8(sec, 64)?;
+
+    Ok(())
+}
+
+/// Template 3.40: Gaussian Latitude/Longitude.
+/// Same octet layout as Template 3.0 for most fields, but octet 73-76
+/// contain N (number of parallels between pole and equator) instead of
+/// the scanning mode appendix.
+fn parse_grid_template_40(sec: &[u8], grid: &mut GridDefinition) -> Result<(), String> {
+    if sec.len() < 72 {
+        return Err("Section 3 template 40 (Gaussian) too short".into());
+    }
+
+    grid.nx = read_u32(sec, 30)?;
+    grid.ny = read_u32(sec, 34)?;
+
+    let basic_angle = read_u32(sec, 38)?;
+    let subdivisions = read_u32(sec, 42)?;
+    let divisor = if basic_angle == 0 || subdivisions == 0 {
+        1_000_000.0
+    } else {
+        subdivisions as f64 / basic_angle as f64
+    };
+
+    grid.lat1 = read_signed_u32(sec, 46)? as f64 / divisor;
+    grid.lon1 = read_signed_u32(sec, 50)? as f64 / divisor;
+    grid.lat2 = read_signed_u32(sec, 55)? as f64 / divisor;
+    grid.lon2 = read_signed_u32(sec, 59)? as f64 / divisor;
+    grid.dx = read_u32(sec, 63)? as f64 / divisor;
+    // For Gaussian grids, octet 68-71 is N (number of parallels between
+    // a pole and the equator), not Dy in the conventional sense.
+    grid.n_parallel = read_u32(sec, 67)?;
+    grid.scan_mode = read_u8(sec, 71)?;
+    // Compute approximate dy for consumers that expect it
+    grid.dy = if grid.n_parallel > 0 {
+        90.0 / grid.n_parallel as f64
+    } else if grid.ny > 1 {
+        (grid.lat2 - grid.lat1).abs() / (grid.ny as f64 - 1.0)
+    } else {
+        0.0
+    };
 
     Ok(())
 }

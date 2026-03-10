@@ -32,6 +32,20 @@ from rustmet._rustmet import (
     open,
     products,
     __version__,
+    # Thermodynamic functions
+    lcltemp,
+    thetae,
+    mixratio,
+    dewpoint_from_q,
+    # Composite severe weather parameters
+    compute_cape_cin,
+    compute_srh,
+    compute_shear,
+    compute_stp,
+    compute_ehi,
+    compute_scp,
+    compute_lapse_rate,
+    compute_pw,
 )
 
 
@@ -121,4 +135,18 @@ __all__ = [
     "products",
     "to_xarray",
     "__version__",
+    # Thermodynamic functions
+    "lcltemp",
+    "thetae",
+    "mixratio",
+    "dewpoint_from_q",
+    # Composite severe weather parameters
+    "compute_cape_cin",
+    "compute_srh",
+    "compute_shear",
+    "compute_stp",
+    "compute_ehi",
+    "compute_scp",
+    "compute_lapse_rate",
+    "compute_pw",
 ]

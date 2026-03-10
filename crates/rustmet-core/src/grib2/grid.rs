@@ -9,7 +9,10 @@ pub fn grid_latlon(grid: &GridDefinition) -> (Vec<f64>, Vec<f64>) {
 
     match grid.template {
         0 => latlon_grid(grid, nx, ny, n),
+        10 => mercator_grid(grid, nx, ny, n),
+        20 => polar_stereo_grid(grid, nx, ny, n),
         30 => lambert_grid(grid, nx, ny, n),
+        40 => gaussian_grid(grid, nx, ny, n),
         _ => {
             // Return empty vectors for unknown templates
             (Vec::new(), Vec::new())
@@ -46,6 +49,143 @@ fn latlon_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f6
     }
 
     (lats, lons)
+}
+
+/// Template 3.10: Mercator projection.
+/// Inverse projection from grid (i, j) to (lat, lon).
+fn mercator_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut lats = Vec::with_capacity(n);
+    let mut lons = Vec::with_capacity(n);
+
+    let deg2rad = std::f64::consts::PI / 180.0;
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    // Earth radius (WMO standard)
+    let r = 6_371_229.0_f64;
+
+    // LaD is the latitude where dx/dy match the specified grid spacing.
+    // The Mercator scale factor at LaD: cos(LaD).
+    let lad_rad = grid.lad * deg2rad;
+    let cos_lad = lad_rad.cos();
+
+    // The first grid point in Mercator projected coordinates
+    let lat1_rad = grid.lat1 * deg2rad;
+    let lon1_rad = grid.lon1 * deg2rad;
+
+    let x0 = r * cos_lad * lon1_rad;
+    let y0 = r * cos_lad * ((std::f64::consts::PI / 4.0 + lat1_rad / 2.0).tan()).ln();
+
+    let dx = grid.dx;
+    let dy = grid.dy;
+
+    for j in 0..ny {
+        for i in 0..nx {
+            let x = x0 + i as f64 * dx;
+            let y = y0 + j as f64 * dy;
+
+            let lon = (x / (r * cos_lad)) * rad2deg;
+            let lat = (2.0 * (y / (r * cos_lad)).exp().atan() - std::f64::consts::PI / 2.0)
+                * rad2deg;
+
+            lats.push(lat);
+            lons.push(lon);
+        }
+    }
+
+    (lats, lons)
+}
+
+/// Template 3.20: Polar Stereographic projection.
+/// Inverse projection from grid (i, j) to (lat, lon).
+fn polar_stereo_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut lats = Vec::with_capacity(n);
+    let mut lons = Vec::with_capacity(n);
+
+    let deg2rad = std::f64::consts::PI / 180.0;
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    let r = 6_371_229.0_f64;
+
+    let lov_rad = grid.lov * deg2rad;
+    let lad_rad = grid.lad * deg2rad;
+
+    // projection_center_flag bit 0: 0 = North Pole, 1 = South Pole
+    let south_pole = (grid.projection_center_flag & 1) != 0;
+
+    // Scale factor at the true latitude (LaD)
+    // For a polar stereographic projection tangent at a pole and
+    // with true latitude LaD, the scale factor is:
+    //   k = (1 + sin(|LaD|)) / 2   [for standard polar stereo]
+    let k = (1.0 + lad_rad.abs().sin()) / 2.0;
+
+    // Project the first grid point to stereographic x,y so we know the origin offset
+    let lat1_rad = grid.lat1 * deg2rad;
+    let lon1_rad = grid.lon1 * deg2rad;
+
+    let (x0, y0) = if south_pole {
+        let t = (std::f64::consts::PI / 4.0 + lat1_rad / 2.0).tan();
+        let rho = 2.0 * r * k * t;
+        let theta = lon1_rad - lov_rad;
+        (rho * theta.sin(), rho * theta.cos())
+    } else {
+        let t = (std::f64::consts::PI / 4.0 - lat1_rad / 2.0).tan();
+        let rho = 2.0 * r * k * t;
+        let theta = lon1_rad - lov_rad;
+        (rho * theta.sin(), -rho * theta.cos())
+    };
+
+    let dx = grid.dx;
+    let dy = grid.dy;
+
+    for j in 0..ny {
+        for i in 0..nx {
+            let x = x0 + i as f64 * dx;
+            let y = y0 + j as f64 * dy;
+
+            let (lat, lon) = if south_pole {
+                let rho = (x * x + y * y).sqrt();
+                let lat = if rho.abs() < 1e-10 {
+                    -90.0
+                } else {
+                    (2.0 * (rho / (2.0 * r * k)).atan() - std::f64::consts::PI / 2.0) * rad2deg
+                };
+                let lon = (lov_rad + x.atan2(y)) * rad2deg;
+                (lat, lon)
+            } else {
+                let rho = (x * x + y * y).sqrt();
+                let lat = if rho.abs() < 1e-10 {
+                    90.0
+                } else {
+                    (std::f64::consts::PI / 2.0 - 2.0 * (rho / (2.0 * r * k)).atan()) * rad2deg
+                };
+                let lon = (lov_rad + x.atan2(-y)) * rad2deg;
+                (lat, lon)
+            };
+
+            // Normalize longitude to [-180, 360)
+            let lon = if lon > 360.0 {
+                lon - 360.0
+            } else if lon < -180.0 {
+                lon + 360.0
+            } else {
+                lon
+            };
+
+            lats.push(lat);
+            lons.push(lon);
+        }
+    }
+
+    (lats, lons)
+}
+
+/// Template 3.40: Gaussian Latitude/Longitude grid.
+/// Approximated as regular lat/lon spacing. For exact Gaussian latitudes,
+/// one would need to compute roots of Legendre polynomials.
+fn gaussian_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f64>, Vec<f64>) {
+    // Use the same logic as latlon_grid — the lat1/lat2/lon1/lon2 and
+    // approximate dy have already been populated by the parser.
+    latlon_grid(grid, nx, ny, n)
 }
 
 /// Template 3.30: Lambert Conformal Conic projection.

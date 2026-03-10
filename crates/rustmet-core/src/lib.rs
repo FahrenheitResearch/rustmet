@@ -10,18 +10,18 @@
 //!
 //! // Create HTTP client and download HRRR 2m temperature
 //! let client = download::DownloadClient::new().unwrap();
-//! let url = models::hrrr::sfc_url("20240115", 12, 0);
+//! let url = models::hrrr::HrrrConfig::aws_url("20240115", 12, "sfc", 0);
 //! let idx_url = format!("{}.idx", url);
 //!
 //! // Parse the .idx file to find byte ranges
 //! let idx_text = client.get_text(&idx_url).unwrap();
 //! let entries = download::parse_idx(&idx_text);
 //! let matches = download::find_entries(&entries, "TMP:2 m above ground");
-//! let ranges = download::byte_ranges(&matches, &entries);
+//! let ranges = download::byte_ranges(&entries, &matches);
 //!
 //! // Download just the needed bytes and parse GRIB2
 //! let data = client.get_ranges(&url, &ranges).unwrap();
-//! let grib = grib2::Grib2File::parse(&data).unwrap();
+//! let grib = grib2::Grib2File::from_bytes(&data).unwrap();
 //!
 //! // Unpack the data values
 //! let values = grib2::unpack_message(&grib.messages[0]).unwrap();

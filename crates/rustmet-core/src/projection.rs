@@ -221,6 +221,267 @@ impl Projection for LatLonProjection {
     fn ny(&self) -> u32 { self.ny_val }
 }
 
+// ============================================================
+// Polar Stereographic Projection
+// ============================================================
+
+/// Polar stereographic projection used by HRRR-Alaska, NWPS, and Canadian models.
+#[derive(Debug, Clone)]
+pub struct PolarStereoProjection {
+    pub lov: f64,     // radians — orientation longitude
+    pub lad: f64,     // radians — true latitude
+    pub la1: f64,     // radians — first grid point latitude
+    pub lo1: f64,     // radians — first grid point longitude
+    pub dx: f64,
+    pub dy: f64,
+    nx_val: u32,
+    ny_val: u32,
+    pub south_pole: bool,
+    // Derived
+    k: f64,
+    x0: f64,
+    y0: f64,
+}
+
+impl PolarStereoProjection {
+    pub fn new(
+        lov_deg: f64, lad_deg: f64, la1_deg: f64, lo1_deg: f64,
+        dx: f64, dy: f64, nx: u32, ny: u32, south_pole: bool,
+    ) -> Self {
+        let lov = lov_deg * DEG_TO_RAD;
+        let lad = lad_deg * DEG_TO_RAD;
+        let la1 = la1_deg * DEG_TO_RAD;
+        let lo1 = lo1_deg * DEG_TO_RAD;
+
+        let k = (1.0 + lad.abs().sin()) / 2.0;
+
+        let (x0, y0) = if south_pole {
+            let t = (PI / 4.0 + la1 / 2.0).tan();
+            let rho = 2.0 * EARTH_RADIUS * k * t;
+            let theta = lo1 - lov;
+            (rho * theta.sin(), rho * theta.cos())
+        } else {
+            let t = (PI / 4.0 - la1 / 2.0).tan();
+            let rho = 2.0 * EARTH_RADIUS * k * t;
+            let theta = lo1 - lov;
+            (rho * theta.sin(), -rho * theta.cos())
+        };
+
+        Self { lov, lad, la1, lo1, dx, dy, nx_val: nx, ny_val: ny, south_pole, k, x0, y0 }
+    }
+
+    /// Build from a GRIB2 GridDefinition with template 20.
+    pub fn from_grid_def(g: &super::grib2::parser::GridDefinition) -> Self {
+        let south_pole = (g.projection_center_flag & 1) != 0;
+        Self::new(g.lov, g.lad, g.lat1, g.lon1, g.dx, g.dy, g.nx, g.ny, south_pole)
+    }
+}
+
+impl Projection for PolarStereoProjection {
+    fn latlon_to_grid(&self, lat_deg: f64, lon_deg: f64) -> (f64, f64) {
+        let lat = lat_deg * DEG_TO_RAD;
+        let lon = lon_deg * DEG_TO_RAD;
+
+        let (x, y) = if self.south_pole {
+            let t = (PI / 4.0 + lat / 2.0).tan();
+            let rho = 2.0 * EARTH_RADIUS * self.k * t;
+            let theta = lon - self.lov;
+            (rho * theta.sin(), rho * theta.cos())
+        } else {
+            let t = (PI / 4.0 - lat / 2.0).tan();
+            let rho = 2.0 * EARTH_RADIUS * self.k * t;
+            let theta = lon - self.lov;
+            (rho * theta.sin(), -rho * theta.cos())
+        };
+
+        ((x - self.x0) / self.dx, (y - self.y0) / self.dy)
+    }
+
+    fn grid_to_latlon(&self, i: f64, j: f64) -> (f64, f64) {
+        let x = self.x0 + i * self.dx;
+        let y = self.y0 + j * self.dy;
+
+        if self.south_pole {
+            let rho = (x * x + y * y).sqrt();
+            let lat = if rho.abs() < 1e-10 {
+                -90.0
+            } else {
+                (2.0 * (rho / (2.0 * EARTH_RADIUS * self.k)).atan() - PI / 2.0) * RAD_TO_DEG
+            };
+            let mut lon = (self.lov + x.atan2(y)) * RAD_TO_DEG;
+            while lon > 180.0 { lon -= 360.0; }
+            while lon < -180.0 { lon += 360.0; }
+            (lat, lon)
+        } else {
+            let rho = (x * x + y * y).sqrt();
+            let lat = if rho.abs() < 1e-10 {
+                90.0
+            } else {
+                (PI / 2.0 - 2.0 * (rho / (2.0 * EARTH_RADIUS * self.k)).atan()) * RAD_TO_DEG
+            };
+            let mut lon = (self.lov + x.atan2(-y)) * RAD_TO_DEG;
+            while lon > 180.0 { lon -= 360.0; }
+            while lon < -180.0 { lon += 360.0; }
+            (lat, lon)
+        }
+    }
+
+    fn bounding_box(&self) -> (f64, f64, f64, f64) {
+        let corners = [
+            self.grid_to_latlon(0.0, 0.0),
+            self.grid_to_latlon(self.nx_val as f64 - 1.0, 0.0),
+            self.grid_to_latlon(0.0, self.ny_val as f64 - 1.0),
+            self.grid_to_latlon(self.nx_val as f64 - 1.0, self.ny_val as f64 - 1.0),
+        ];
+        let min_lat = corners.iter().map(|c| c.0).fold(f64::MAX, f64::min);
+        let max_lat = corners.iter().map(|c| c.0).fold(f64::MIN, f64::max);
+        let min_lon = corners.iter().map(|c| c.1).fold(f64::MAX, f64::min);
+        let max_lon = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max);
+        (min_lat, min_lon, max_lat, max_lon)
+    }
+
+    fn nx(&self) -> u32 { self.nx_val }
+    fn ny(&self) -> u32 { self.ny_val }
+}
+
+// ============================================================
+// Mercator Projection
+// ============================================================
+
+/// Standard Mercator projection used by some tropical/regional models.
+#[derive(Debug, Clone)]
+pub struct MercatorProjection {
+    pub lad: f64,     // radians — latitude where dx/dy are true
+    pub la1: f64,     // radians — first grid point latitude
+    pub lo1: f64,     // radians — first grid point longitude
+    pub dx: f64,
+    pub dy: f64,
+    nx_val: u32,
+    ny_val: u32,
+    // Derived
+    cos_lad: f64,
+    x0: f64,
+    y0: f64,
+}
+
+impl MercatorProjection {
+    pub fn new(
+        lad_deg: f64, la1_deg: f64, lo1_deg: f64,
+        dx: f64, dy: f64, nx: u32, ny: u32,
+    ) -> Self {
+        let lad = lad_deg * DEG_TO_RAD;
+        let la1 = la1_deg * DEG_TO_RAD;
+        let lo1 = lo1_deg * DEG_TO_RAD;
+        let cos_lad = lad.cos();
+
+        let x0 = EARTH_RADIUS * cos_lad * lo1;
+        let y0 = EARTH_RADIUS * cos_lad * ((PI / 4.0 + la1 / 2.0).tan()).ln();
+
+        Self { lad, la1, lo1, dx, dy, nx_val: nx, ny_val: ny, cos_lad, x0, y0 }
+    }
+
+    /// Build from a GRIB2 GridDefinition with template 10.
+    pub fn from_grid_def(g: &super::grib2::parser::GridDefinition) -> Self {
+        Self::new(g.lad, g.lat1, g.lon1, g.dx, g.dy, g.nx, g.ny)
+    }
+}
+
+impl Projection for MercatorProjection {
+    fn latlon_to_grid(&self, lat_deg: f64, lon_deg: f64) -> (f64, f64) {
+        let lat = lat_deg * DEG_TO_RAD;
+        let lon = lon_deg * DEG_TO_RAD;
+
+        let x = EARTH_RADIUS * self.cos_lad * lon;
+        let y = EARTH_RADIUS * self.cos_lad * ((PI / 4.0 + lat / 2.0).tan()).ln();
+
+        ((x - self.x0) / self.dx, (y - self.y0) / self.dy)
+    }
+
+    fn grid_to_latlon(&self, i: f64, j: f64) -> (f64, f64) {
+        let x = self.x0 + i * self.dx;
+        let y = self.y0 + j * self.dy;
+
+        let lon = (x / (EARTH_RADIUS * self.cos_lad)) * RAD_TO_DEG;
+        let lat = (2.0 * (y / (EARTH_RADIUS * self.cos_lad)).exp().atan() - PI / 2.0) * RAD_TO_DEG;
+
+        (lat, lon)
+    }
+
+    fn bounding_box(&self) -> (f64, f64, f64, f64) {
+        let corners = [
+            self.grid_to_latlon(0.0, 0.0),
+            self.grid_to_latlon(self.nx_val as f64 - 1.0, 0.0),
+            self.grid_to_latlon(0.0, self.ny_val as f64 - 1.0),
+            self.grid_to_latlon(self.nx_val as f64 - 1.0, self.ny_val as f64 - 1.0),
+        ];
+        let min_lat = corners.iter().map(|c| c.0).fold(f64::MAX, f64::min);
+        let max_lat = corners.iter().map(|c| c.0).fold(f64::MIN, f64::max);
+        let min_lon = corners.iter().map(|c| c.1).fold(f64::MAX, f64::min);
+        let max_lon = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max);
+        (min_lat, min_lon, max_lat, max_lon)
+    }
+
+    fn nx(&self) -> u32 { self.nx_val }
+    fn ny(&self) -> u32 { self.ny_val }
+}
+
+// ============================================================
+// Gaussian Latitude/Longitude Projection
+// ============================================================
+
+/// Gaussian lat/lon projection used by ECMWF/ERA5.
+/// This is an approximation that treats Gaussian latitudes as regularly spaced.
+/// For exact Gaussian latitudes, roots of Legendre polynomials would be needed.
+#[derive(Debug, Clone)]
+pub struct GaussianProjection {
+    pub lat1: f64,
+    pub lon1: f64,
+    pub lat2: f64,
+    pub lon2: f64,
+    nx_val: u32,
+    ny_val: u32,
+    pub dlat: f64,
+    pub dlon: f64,
+}
+
+impl GaussianProjection {
+    pub fn new(lat1: f64, lon1: f64, lat2: f64, lon2: f64, nx: u32, ny: u32) -> Self {
+        let dlat = if ny > 1 { (lat2 - lat1) / (ny - 1) as f64 } else { 1.0 };
+        let dlon = if nx > 1 { (lon2 - lon1) / (nx - 1) as f64 } else { 1.0 };
+        Self { lat1, lon1, lat2, lon2, nx_val: nx, ny_val: ny, dlat, dlon }
+    }
+
+    /// Build from a GRIB2 GridDefinition with template 40.
+    pub fn from_grid_def(g: &super::grib2::parser::GridDefinition) -> Self {
+        Self::new(g.lat1, g.lon1, g.lat2, g.lon2, g.nx, g.ny)
+    }
+}
+
+impl Projection for GaussianProjection {
+    fn latlon_to_grid(&self, lat: f64, lon: f64) -> (f64, f64) {
+        let i = (lon - self.lon1) / self.dlon;
+        let j = (lat - self.lat1) / self.dlat;
+        (i, j)
+    }
+
+    fn grid_to_latlon(&self, i: f64, j: f64) -> (f64, f64) {
+        let lat = self.lat1 + j * self.dlat;
+        let lon = self.lon1 + i * self.dlon;
+        (lat, lon)
+    }
+
+    fn bounding_box(&self) -> (f64, f64, f64, f64) {
+        let min_lat = self.lat1.min(self.lat2);
+        let max_lat = self.lat1.max(self.lat2);
+        let min_lon = self.lon1.min(self.lon2);
+        let max_lon = self.lon1.max(self.lon2);
+        (min_lat, min_lon, max_lat, max_lon)
+    }
+
+    fn nx(&self) -> u32 { self.nx_val }
+    fn ny(&self) -> u32 { self.ny_val }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +557,106 @@ mod tests {
         let (lat, lon) = lambert.grid_to_latlon(0.0, 0.0);
         assert!(lat > 0.0);
         assert!(lon < 0.0);
+    }
+
+    #[test]
+    fn test_polar_stereo_roundtrip() {
+        // North pole projection — approximate HRRR-Alaska-like setup
+        let proj = PolarStereoProjection::new(
+            -150.0,  // lov
+            60.0,    // lad
+            40.0,    // la1
+            -170.0,  // lo1
+            3000.0, 3000.0,
+            200, 200,
+            false,   // north pole
+        );
+
+        // Grid origin should map back to la1, lo1
+        let (lat, lon) = proj.grid_to_latlon(0.0, 0.0);
+        assert!((lat - 40.0).abs() < 0.1, "lat={}", lat);
+        assert!((lon - (-170.0)).abs() < 0.1, "lon={}", lon);
+
+        // Roundtrip through a middle point
+        let (lat_mid, lon_mid) = proj.grid_to_latlon(100.0, 100.0);
+        let (i, j) = proj.latlon_to_grid(lat_mid, lon_mid);
+        assert!((i - 100.0).abs() < 0.01, "i={}", i);
+        assert!((j - 100.0).abs() < 0.01, "j={}", j);
+    }
+
+    #[test]
+    fn test_polar_stereo_south() {
+        let proj = PolarStereoProjection::new(
+            0.0,     // lov
+            -60.0,   // lad
+            -70.0,   // la1
+            -30.0,   // lo1
+            5000.0, 5000.0,
+            100, 100,
+            true,    // south pole
+        );
+
+        let (lat, _lon) = proj.grid_to_latlon(0.0, 0.0);
+        assert!((lat - (-70.0)).abs() < 0.1, "lat={}", lat);
+
+        let (lat2, lon2) = proj.grid_to_latlon(50.0, 50.0);
+        let (i, j) = proj.latlon_to_grid(lat2, lon2);
+        assert!((i - 50.0).abs() < 0.01, "i={}", i);
+        assert!((j - 50.0).abs() < 0.01, "j={}", j);
+    }
+
+    #[test]
+    fn test_mercator_roundtrip() {
+        let proj = MercatorProjection::new(
+            20.0,    // lad
+            10.0,    // la1
+            -80.0,   // lo1
+            5000.0, 5000.0,
+            200, 150,
+        );
+
+        let (lat, lon) = proj.grid_to_latlon(0.0, 0.0);
+        assert!((lat - 10.0).abs() < 0.1, "lat={}", lat);
+        assert!((lon - (-80.0)).abs() < 0.1, "lon={}", lon);
+
+        let (lat_mid, lon_mid) = proj.grid_to_latlon(100.0, 75.0);
+        let (i, j) = proj.latlon_to_grid(lat_mid, lon_mid);
+        assert!((i - 100.0).abs() < 0.01, "i={}", i);
+        assert!((j - 75.0).abs() < 0.01, "j={}", j);
+    }
+
+    #[test]
+    fn test_gaussian_roundtrip() {
+        let proj = GaussianProjection::new(
+            90.0, 0.0,    // lat1, lon1 (north pole, dateline)
+            -90.0, 359.5, // lat2, lon2
+            720, 361,
+        );
+
+        let (lat, lon) = proj.grid_to_latlon(0.0, 0.0);
+        assert!((lat - 90.0).abs() < 0.01);
+        assert!((lon - 0.0).abs() < 0.01);
+
+        let (i, j) = proj.latlon_to_grid(0.0, 180.0);
+        let (lat2, lon2) = proj.grid_to_latlon(i, j);
+        assert!((lat2 - 0.0).abs() < 0.01);
+        assert!((lon2 - 180.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_new_projections_trait_dyn() {
+        let polar: Box<dyn Projection> = Box::new(PolarStereoProjection::new(
+            -150.0, 60.0, 40.0, -170.0, 3000.0, 3000.0, 200, 200, false,
+        ));
+        let mercator: Box<dyn Projection> = Box::new(MercatorProjection::new(
+            20.0, 10.0, -80.0, 5000.0, 5000.0, 200, 150,
+        ));
+        let gaussian: Box<dyn Projection> = Box::new(GaussianProjection::new(
+            90.0, 0.0, -90.0, 359.5, 720, 361,
+        ));
+
+        assert_eq!(polar.nx(), 200);
+        assert_eq!(mercator.nx(), 200);
+        assert_eq!(gaussian.nx(), 720);
     }
 }
