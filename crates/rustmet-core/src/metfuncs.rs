@@ -11,6 +11,7 @@ pub const ROCP: f64 = 0.28571426;  // Rd/Cp
 pub const ZEROCNK: f64 = 273.15;   // 0 Celsius in Kelvin
 pub const MISSING: f64 = -9999.0;
 pub const EPS: f64 = 0.62197;      // Rd/Rv = Mw/Md (ratio of molecular weights)
+pub const LV: f64 = 2.501e6;         // Latent heat of vaporization (J/kg)
 pub const LAPSE_STD: f64 = 0.0065;  // Standard atmosphere lapse rate (K/m)
 pub const P0_STD: f64 = 1013.25;    // Standard sea level pressure (hPa)
 pub const T0_STD: f64 = 288.15;     // Standard sea level temperature (K)
@@ -1033,6 +1034,1003 @@ pub fn station_to_sea_level_pressure(p_station: f64, elevation_m: f64, t_c: f64)
     // Mean virtual temperature of the fictitious column below the station
     let t_mean = t_k + LAPSE_STD * elevation_m / 2.0;
     p_station * (G * elevation_m / (RD * t_mean)).exp()
+}
+
+// =============================================================================
+// Moist Thermodynamics
+// =============================================================================
+
+/// Temperature at each pressure level following a dry adiabat.
+/// T = T_surface * (p/p_surface)^(Rd/Cp).
+/// p: pressure levels (hPa, surface first), t_surface_c: surface temperature (Celsius).
+/// Returns temperatures in Celsius at each level.
+pub fn dry_lapse(p: &[f64], t_surface_c: f64) -> Vec<f64> {
+    if p.is_empty() {
+        return vec![];
+    }
+    let t_surface_k = t_surface_c + ZEROCNK;
+    let p_surface = p[0];
+    p.iter()
+        .map(|&pi| t_surface_k * (pi / p_surface).powf(ROCP) - ZEROCNK)
+        .collect()
+}
+
+/// Moist adiabatic lapse rate dT/dp for saturated parcel.
+/// Returns dT/dp in K/hPa (for use in RK4 integration).
+fn moist_lapse_rate(p_hpa: f64, t_c: f64) -> f64 {
+    let t_k = t_c + ZEROCNK;
+    let es = saturation_vapor_pressure(t_c);
+    let rs = EPS * es / (p_hpa - es); // kg/kg
+    let p_pa = p_hpa * 100.0;
+
+    // Clausius-Clapeyron based moist adiabatic lapse rate in pressure coords
+    let numerator = (RD * t_k + LV * rs) / p_pa;
+    let denominator = CP + (LV * LV * rs * EPS) / (RD * t_k * t_k);
+    numerator / denominator
+}
+
+/// Temperature following a moist (saturated) adiabat using RK4 integration.
+/// p: pressure levels (hPa, surface/start first), t_start_c: starting temperature (Celsius).
+/// Returns temperatures in Celsius at each level.
+pub fn moist_lapse(p: &[f64], t_start_c: f64) -> Vec<f64> {
+    if p.is_empty() {
+        return vec![];
+    }
+    let mut result = Vec::with_capacity(p.len());
+    result.push(t_start_c);
+
+    let mut t = t_start_c;
+    for i in 1..p.len() {
+        let dp = p[i] - p[i - 1];
+        if dp.abs() < 1e-10 {
+            result.push(t);
+            continue;
+        }
+        // RK4 integration
+        let n_steps = ((dp.abs() / 5.0) as usize).max(1);
+        let h = dp / n_steps as f64;
+        for _ in 0..n_steps {
+            let p_curr = p[i - 1] + (result.len() as f64 - 1.0) * 0.0; // approximate
+            let p_mid = p[i - 1] + (p[i] - p[i - 1]) * 0.5;
+            let _ = p_mid;
+            // Simple approach: subdivide the pressure interval
+            let k1 = h * moist_lapse_rate(p[i - 1] + (i as f64 - 1.0) * 0.0, t);
+            let _ = p_curr;
+            // More straightforward RK4 on [p[i-1], p[i]]
+            break; // will use loop below instead
+        }
+        // Redo with cleaner RK4
+        let n_steps = ((dp.abs() / 5.0) as usize).max(4);
+        let h = dp / n_steps as f64;
+        let mut p_c = p[i - 1];
+        for _ in 0..n_steps {
+            let k1 = h * moist_lapse_rate(p_c, t);
+            let k2 = h * moist_lapse_rate(p_c + h / 2.0, t + k1 / 2.0);
+            let k3 = h * moist_lapse_rate(p_c + h / 2.0, t + k2 / 2.0);
+            let k4 = h * moist_lapse_rate(p_c + h, t + k3);
+            t += (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
+            p_c += h;
+        }
+        result.push(t);
+    }
+    result
+}
+
+/// Dry static energy: DSE = Cp*T + g*z (J/kg).
+/// height_m: height in meters, t_k: temperature in Kelvin.
+pub fn dry_static_energy(height_m: f64, t_k: f64) -> f64 {
+    CP * t_k + G * height_m
+}
+
+/// Moist static energy: MSE = Cp*T + g*z + Lv*q (J/kg).
+/// height_m: height (m), t_k: temperature (K), q_kgkg: specific humidity (kg/kg).
+pub fn moist_static_energy(height_m: f64, t_k: f64, q_kgkg: f64) -> f64 {
+    CP * t_k + G * height_m + LV * q_kgkg
+}
+
+/// Full parcel temperature profile: dry adiabat to LCL, then moist adiabat above.
+/// p: pressure levels (hPa, surface first, decreasing), t_surface_c: surface T (C),
+/// td_surface_c: surface Td (C). Returns parcel temperature (Celsius) at each level.
+pub fn parcel_profile(p: &[f64], t_surface_c: f64, td_surface_c: f64) -> Vec<f64> {
+    if p.is_empty() {
+        return vec![];
+    }
+    let (p_lcl, t_lcl) = drylift(p[0], t_surface_c, td_surface_c);
+
+    let mut result = Vec::with_capacity(p.len());
+
+    // Dry adiabat below LCL
+    let t_surface_k = t_surface_c + ZEROCNK;
+    let p_surface = p[0];
+
+    // Collect moist adiabat levels (at and above LCL)
+    let mut moist_pressures = vec![p_lcl];
+    let mut lcl_idx = p.len(); // index of first level at or above LCL
+
+    for (i, &pi) in p.iter().enumerate() {
+        if pi <= p_lcl {
+            if lcl_idx == p.len() {
+                lcl_idx = i;
+            }
+            moist_pressures.push(pi);
+        }
+    }
+
+    // Compute moist adiabat from LCL upward
+    let moist_temps = moist_lapse(&moist_pressures, t_lcl);
+
+    // Build result
+    let mut moist_idx = 1; // skip the LCL entry itself
+    for (i, &pi) in p.iter().enumerate() {
+        if pi > p_lcl {
+            // Dry adiabat
+            let t_k = t_surface_k * (pi / p_surface).powf(ROCP);
+            result.push(t_k - ZEROCNK);
+        } else {
+            // Moist adiabat
+            if moist_idx < moist_temps.len() {
+                result.push(moist_temps[moist_idx]);
+                moist_idx += 1;
+            } else {
+                // Fallback: use satlift
+                let theta_k = (t_lcl + ZEROCNK) * ((1000.0 / p_lcl).powf(ROCP));
+                let theta_c = theta_k - ZEROCNK;
+                let thetam = theta_c - wobf(theta_c) + wobf(t_lcl);
+                result.push(satlift(pi, thetam));
+            }
+        }
+    }
+
+    result
+}
+
+/// Dewpoint (Celsius) from vapor pressure (hPa). Inverse Bolton formula.
+pub fn dewpoint(vapor_pressure_hpa: f64) -> f64 {
+    if vapor_pressure_hpa <= 0.0 {
+        return -ZEROCNK; // absolute zero-ish
+    }
+    let ln_ratio = (vapor_pressure_hpa / 6.112).ln();
+    243.5 * ln_ratio / (17.67 - ln_ratio)
+}
+
+/// Mixing ratio (g/kg) from relative humidity (%).
+/// p_hpa: pressure (hPa), t_c: temperature (C), rh: relative humidity (0-100).
+pub fn mixing_ratio_from_relative_humidity(p_hpa: f64, t_c: f64, rh: f64) -> f64 {
+    let ws = saturation_mixing_ratio(p_hpa, t_c);
+    ws * rh / 100.0
+}
+
+/// Relative humidity (%) from mixing ratio.
+/// p_hpa: pressure (hPa), t_c: temperature (C), w_gkg: mixing ratio (g/kg).
+pub fn relative_humidity_from_mixing_ratio(p_hpa: f64, t_c: f64, w_gkg: f64) -> f64 {
+    let ws = saturation_mixing_ratio(p_hpa, t_c);
+    if ws <= 0.0 {
+        return 0.0;
+    }
+    (w_gkg / ws) * 100.0
+}
+
+/// Relative humidity (%) from specific humidity.
+/// p_hpa: pressure (hPa), t_c: temperature (C), q: specific humidity (kg/kg).
+pub fn relative_humidity_from_specific_humidity(p_hpa: f64, t_c: f64, q: f64) -> f64 {
+    let w_gkg = mixing_ratio_from_specific_humidity(q);
+    relative_humidity_from_mixing_ratio(p_hpa, t_c, w_gkg)
+}
+
+/// Specific humidity (kg/kg) from dewpoint.
+/// p_hpa: pressure (hPa), td_c: dewpoint (Celsius).
+pub fn specific_humidity_from_dewpoint(p_hpa: f64, td_c: f64) -> f64 {
+    let e = saturation_vapor_pressure(td_c);
+    let w = EPS * e / (p_hpa - e); // kg/kg
+    w / (1.0 + w)
+}
+
+/// Dewpoint (Celsius) from specific humidity.
+/// p_hpa: pressure (hPa), q: specific humidity (kg/kg).
+pub fn dewpoint_from_specific_humidity(p_hpa: f64, q: f64) -> f64 {
+    let w = q / (1.0 - q); // kg/kg
+    let e = w * p_hpa / (EPS + w);
+    dewpoint(e)
+}
+
+/// Saturation equivalent potential temperature (K). Assumes RH=100%.
+/// p_hpa: pressure (hPa), t_c: temperature (Celsius).
+pub fn saturation_equivalent_potential_temperature(p_hpa: f64, t_c: f64) -> f64 {
+    equivalent_potential_temperature(p_hpa, t_c, t_c)
+}
+
+/// Scale height: H = R*T/g (meters).
+/// t_k: temperature in Kelvin.
+pub fn scale_height(t_k: f64) -> f64 {
+    RD * t_k / G
+}
+
+/// Convert vertical velocity w (m/s) to omega (Pa/s).
+/// omega = -rho * g * w, where rho = p/(Rd*Tv).
+/// w_ms: vertical velocity (m/s, positive up), p_hpa: pressure (hPa), t_c: temperature (C).
+pub fn vertical_velocity_pressure(w_ms: f64, p_hpa: f64, t_c: f64) -> f64 {
+    let t_k = t_c + ZEROCNK;
+    let p_pa = p_hpa * 100.0;
+    let rho = p_pa / (RD * t_k);
+    -rho * G * w_ms
+}
+
+/// Convert omega (Pa/s) to vertical velocity w (m/s).
+/// omega_pas: omega (Pa/s, negative = upward), p_hpa: pressure (hPa), t_c: temperature (C).
+pub fn vertical_velocity(omega_pas: f64, p_hpa: f64, t_c: f64) -> f64 {
+    let t_k = t_c + ZEROCNK;
+    let p_pa = p_hpa * 100.0;
+    let rho = p_pa / (RD * t_k);
+    -omega_pas / (rho * G)
+}
+
+/// Static stability parameter: sigma = -(T/theta)(d_theta/dp).
+/// p: pressure levels (hPa), t_k: temperature (K) at each level.
+/// Returns sigma at each level (centered differences, forward/backward at boundaries).
+pub fn static_stability(p: &[f64], t_k: &[f64]) -> Vec<f64> {
+    let n = p.len();
+    if n < 2 {
+        return vec![0.0; n];
+    }
+    // Compute theta at each level
+    let theta: Vec<f64> = p.iter().zip(t_k.iter())
+        .map(|(&pi, &ti)| ti * (1000.0 / pi).powf(ROCP))
+        .collect();
+
+    let mut result = vec![0.0; n];
+    for i in 0..n {
+        let (dtheta, dp) = if i == 0 {
+            (theta[1] - theta[0], p[1] - p[0])
+        } else if i == n - 1 {
+            (theta[n - 1] - theta[n - 2], p[n - 1] - p[n - 2])
+        } else {
+            (theta[i + 1] - theta[i - 1], p[i + 1] - p[i - 1])
+        };
+        if dp.abs() < 1e-10 || theta[i].abs() < 1e-10 {
+            result[i] = 0.0;
+        } else {
+            // Convert dp from hPa to Pa for proper units
+            result[i] = -(t_k[i] / theta[i]) * (dtheta / (dp * 100.0));
+        }
+    }
+    result
+}
+
+/// Pressure-weighted mean of a quantity over a set of pressure levels.
+/// mean = sum(values[i] * dp[i]) / sum(dp[i]) where dp is layer thickness.
+pub fn mean_pressure_weighted(p: &[f64], values: &[f64]) -> f64 {
+    if p.len() < 2 || values.len() < 2 {
+        return if values.is_empty() { 0.0 } else { values[0] };
+    }
+    let mut sum_val = 0.0;
+    let mut sum_dp = 0.0;
+    for i in 0..p.len() - 1 {
+        let dp = (p[i] - p[i + 1]).abs();
+        let avg_val = (values[i] + values[i + 1]) / 2.0;
+        sum_val += avg_val * dp;
+        sum_dp += dp;
+    }
+    if sum_dp <= 0.0 { values[0] } else { sum_val / sum_dp }
+}
+
+/// Inverse Poisson: temperature (K) from potential temperature and pressure.
+/// p_hpa: pressure (hPa), theta_k: potential temperature (K).
+pub fn temperature_from_potential_temperature(p_hpa: f64, theta_k: f64) -> f64 {
+    theta_k * (p_hpa / 1000.0).powf(ROCP)
+}
+
+/// Convert geopotential (m^2/s^2) to geopotential height (m): z = Phi / g0.
+pub fn geopotential_to_height(geopot: f64) -> f64 {
+    geopot / G
+}
+
+/// Convert geopotential height (m) to geopotential (m^2/s^2): Phi = g0 * z.
+pub fn height_to_geopotential(height_m: f64) -> f64 {
+    G * height_m
+}
+
+/// Convert sigma coordinate to pressure.
+/// p = sigma * (p_sfc - p_top) + p_top.
+pub fn sigma_to_pressure(sigma: f64, p_sfc: f64, p_top: f64) -> f64 {
+    sigma * (p_sfc - p_top) + p_top
+}
+
+// =============================================================================
+// Apparent Temperature
+// =============================================================================
+
+/// Heat index using the Rothfusz regression (Fahrenheit).
+/// t_f: temperature (Fahrenheit), rh: relative humidity (%).
+/// Returns heat index in Fahrenheit.
+pub fn heat_index(t_f: f64, rh: f64) -> f64 {
+    // Below 80F, use simple formula
+    if t_f < 80.0 {
+        return 0.5 * (t_f + 61.0 + (t_f - 68.0) * 1.2 + rh * 0.094);
+    }
+
+    // Rothfusz regression
+    let mut hi = -42.379
+        + 2.04901523 * t_f
+        + 10.14333127 * rh
+        - 0.22475541 * t_f * rh
+        - 6.83783e-3 * t_f * t_f
+        - 5.481717e-2 * rh * rh
+        + 1.22874e-3 * t_f * t_f * rh
+        + 8.5282e-4 * t_f * rh * rh
+        - 1.99e-6 * t_f * t_f * rh * rh;
+
+    // Adjustments
+    if rh < 13.0 && t_f >= 80.0 && t_f <= 112.0 {
+        hi -= ((13.0 - rh) / 4.0) * ((17.0 - (t_f - 95.0).abs()) / 17.0).sqrt();
+    } else if rh > 85.0 && t_f >= 80.0 && t_f <= 87.0 {
+        hi += ((rh - 85.0) / 10.0) * ((87.0 - t_f) / 5.0);
+    }
+
+    hi
+}
+
+/// NWS wind chill (Fahrenheit).
+/// t_f: temperature (Fahrenheit), wind_mph: wind speed (mph).
+/// Returns wind chill in Fahrenheit. Only valid for T <= 50F and wind >= 3 mph.
+pub fn windchill(t_f: f64, wind_mph: f64) -> f64 {
+    if t_f > 50.0 || wind_mph < 3.0 {
+        return t_f;
+    }
+    let v016 = wind_mph.powf(0.16);
+    35.74 + 0.6215 * t_f - 35.75 * v016 + 0.4275 * t_f * v016
+}
+
+/// Australian apparent temperature (Celsius).
+/// t_c: temperature (C), rh: relative humidity (%), wind_ms: wind speed (m/s),
+/// solar_wm2: optional solar radiation (W/m^2), defaults to 0.
+pub fn apparent_temperature(t_c: f64, rh: f64, wind_ms: f64, solar_wm2: Option<f64>) -> f64 {
+    let q = solar_wm2.unwrap_or(0.0);
+    // Water vapor pressure from RH and T
+    let e = (rh / 100.0) * saturation_vapor_pressure(t_c);
+    // Steadman (1984) apparent temperature
+    t_c + 0.348 * e - 0.70 * wind_ms + 0.70 * q / (wind_ms + 10.0) - 4.25
+}
+
+// =============================================================================
+// Boundary Layer
+// =============================================================================
+
+/// Brunt-Vaisala frequency squared: N^2 = (g/theta)(d_theta/dz).
+/// p: pressure (hPa), t_k: temperature (K). Uses hydrostatic approx for dz.
+/// Returns N (s^-1) at each level (sqrt of N^2 where positive, 0 where negative).
+pub fn brunt_vaisala_frequency(p: &[f64], t_k: &[f64]) -> Vec<f64> {
+    let n = p.len();
+    if n < 2 {
+        return vec![0.0; n];
+    }
+    let theta: Vec<f64> = p.iter().zip(t_k.iter())
+        .map(|(&pi, &ti)| ti * (1000.0 / pi).powf(ROCP))
+        .collect();
+
+    // Approximate heights using hypsometric equation
+    let mut z = vec![0.0; n];
+    for i in 1..n {
+        let t_mean = (t_k[i - 1] + t_k[i]) / 2.0;
+        z[i] = z[i - 1] + (RD * t_mean / G) * (p[i - 1] / p[i]).ln();
+    }
+
+    let mut result = vec![0.0; n];
+    for i in 0..n {
+        let (dtheta, dz) = if i == 0 {
+            (theta[1] - theta[0], z[1] - z[0])
+        } else if i == n - 1 {
+            (theta[n - 1] - theta[n - 2], z[n - 1] - z[n - 2])
+        } else {
+            (theta[i + 1] - theta[i - 1], z[i + 1] - z[i - 1])
+        };
+        if dz.abs() < 1e-10 || theta[i].abs() < 1e-10 {
+            result[i] = 0.0;
+        } else {
+            let n_sq = (G / theta[i]) * (dtheta / dz);
+            result[i] = if n_sq > 0.0 { n_sq.sqrt() } else { 0.0 };
+        }
+    }
+    result
+}
+
+/// Brunt-Vaisala period: 2*pi/N (seconds).
+/// n: Brunt-Vaisala frequency (s^-1).
+pub fn brunt_vaisala_period(n: f64) -> f64 {
+    if n <= 0.0 {
+        return f64::INFINITY;
+    }
+    2.0 * std::f64::consts::PI / n
+}
+
+/// Gradient Richardson number: Ri = (g/theta)(d_theta/dz) / ((du/dz)^2 + (dv/dz)^2).
+/// theta: potential temperature (K), u,v: wind components (m/s), z: height (m).
+/// All arrays same length. Returns Ri at each level.
+pub fn gradient_richardson_number(theta: &[f64], u: &[f64], v: &[f64], z: &[f64]) -> Vec<f64> {
+    let n = theta.len();
+    if n < 2 {
+        return vec![f64::INFINITY; n];
+    }
+    let mut result = vec![0.0; n];
+    for i in 0..n {
+        let (dtheta, du, dv, dz_val) = if i == 0 {
+            (theta[1] - theta[0], u[1] - u[0], v[1] - v[0], z[1] - z[0])
+        } else if i == n - 1 {
+            (theta[n - 1] - theta[n - 2], u[n - 1] - u[n - 2],
+             v[n - 1] - v[n - 2], z[n - 1] - z[n - 2])
+        } else {
+            (theta[i + 1] - theta[i - 1], u[i + 1] - u[i - 1],
+             v[i + 1] - v[i - 1], z[i + 1] - z[i - 1])
+        };
+        if dz_val.abs() < 1e-10 {
+            result[i] = f64::INFINITY;
+            continue;
+        }
+        let dthetadz = dtheta / dz_val;
+        let dudz = du / dz_val;
+        let dvdz = dv / dz_val;
+        let shear_sq = dudz * dudz + dvdz * dvdz;
+        if shear_sq < 1e-20 {
+            result[i] = f64::INFINITY;
+        } else {
+            result[i] = (G / theta[i]) * dthetadz / shear_sq;
+        }
+    }
+    result
+}
+
+/// Turbulent kinetic energy: TKE = 0.5 * mean(u'^2 + v'^2 + w'^2).
+/// u_prime, v_prime, w_prime: perturbation wind components (m/s).
+pub fn tke(u_prime: &[f64], v_prime: &[f64], w_prime: &[f64]) -> f64 {
+    let n = u_prime.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let sum: f64 = u_prime.iter().zip(v_prime.iter()).zip(w_prime.iter())
+        .map(|((&u, &v), &w)| u * u + v * v + w * w)
+        .sum();
+    0.5 * sum / n as f64
+}
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+/// Find x,y positions where two curves cross (y1 and y2 vs same x axis).
+/// Returns Vec of (x_crossing, y_crossing) tuples.
+pub fn find_intersections(x: &[f64], y1: &[f64], y2: &[f64]) -> Vec<(f64, f64)> {
+    let n = x.len().min(y1.len()).min(y2.len());
+    if n < 2 {
+        return vec![];
+    }
+    let mut crossings = Vec::new();
+    for i in 1..n {
+        let d_prev = y1[i - 1] - y2[i - 1];
+        let d_curr = y1[i] - y2[i];
+        // Sign change means crossing
+        if d_prev * d_curr < 0.0 {
+            let frac = d_prev.abs() / (d_prev.abs() + d_curr.abs());
+            let x_cross = x[i - 1] + frac * (x[i] - x[i - 1]);
+            let y_cross = y1[i - 1] + frac * (y1[i] - y1[i - 1]);
+            crossings.push((x_cross, y_cross));
+        } else if d_curr.abs() < 1e-15 && d_prev.abs() > 1e-15 {
+            // Exactly on the crossing
+            crossings.push((x[i], y1[i]));
+        }
+    }
+    crossings
+}
+
+/// Extract values within a pressure layer.
+/// p: pressure (hPa, decreasing), values: corresponding values.
+/// p_bottom, p_top: layer bounds (hPa). Interpolates at boundaries.
+/// Returns (p_layer, values_layer).
+pub fn get_layer(p: &[f64], values: &[f64], p_bottom: f64, p_top: f64) -> (Vec<f64>, Vec<f64>) {
+    let mut p_out = Vec::new();
+    let mut v_out = Vec::new();
+
+    // Interpolate at bottom boundary if needed
+    if p[0] < p_bottom {
+        // p_bottom is below the profile - skip
+    }
+
+    for i in 0..p.len() {
+        if p[i] <= p_bottom && p[i] >= p_top {
+            // Add interpolated bottom boundary
+            if p_out.is_empty() && i > 0 && p[i - 1] > p_bottom {
+                let frac = (p_bottom.ln() - p[i - 1].ln()) / (p[i].ln() - p[i - 1].ln());
+                let v_interp = values[i - 1] + frac * (values[i] - values[i - 1]);
+                p_out.push(p_bottom);
+                v_out.push(v_interp);
+            } else if p_out.is_empty() && p[i] <= p_bottom {
+                // First point is at or below p_bottom
+            }
+            p_out.push(p[i]);
+            v_out.push(values[i]);
+        } else if p[i] < p_top && !p_out.is_empty() {
+            // Interpolate at top boundary
+            if i > 0 && p[i - 1] >= p_top {
+                let frac = (p_top.ln() - p[i - 1].ln()) / (p[i].ln() - p[i - 1].ln());
+                let v_interp = values[i - 1] + frac * (values[i] - values[i - 1]);
+                p_out.push(p_top);
+                v_out.push(v_interp);
+            }
+            break;
+        }
+    }
+    (p_out, v_out)
+}
+
+/// Extract height values within a pressure layer (same as get_layer but for heights).
+pub fn get_layer_heights(p: &[f64], z: &[f64], p_bottom: f64, p_top: f64) -> (Vec<f64>, Vec<f64>) {
+    get_layer(p, z, p_bottom, p_top)
+}
+
+/// Thinning mask for station plots. Returns Vec<bool> where true = keep.
+/// Removes points closer than radius_deg to already-kept points.
+pub fn reduce_point_density(lats: &[f64], lons: &[f64], radius_deg: f64) -> Vec<bool> {
+    let n = lats.len().min(lons.len());
+    let mut keep = vec![true; n];
+    let r2 = radius_deg * radius_deg;
+
+    for i in 0..n {
+        if !keep[i] {
+            continue;
+        }
+        for j in (i + 1)..n {
+            if !keep[j] {
+                continue;
+            }
+            let dlat = lats[j] - lats[i];
+            let dlon = lons[j] - lons[i];
+            if dlat * dlat + dlon * dlon < r2 {
+                keep[j] = false;
+            }
+        }
+    }
+    keep
+}
+
+// =============================================================================
+// Sounding Functions
+// =============================================================================
+
+/// Downdraft CAPE: integrate negative buoyancy from min theta-e level to surface.
+/// p, t, td: pressure (hPa), temperature (C), dewpoint (C). Surface first.
+pub fn downdraft_cape(p: &[f64], t: &[f64], td: &[f64]) -> f64 {
+    if p.len() < 3 {
+        return 0.0;
+    }
+
+    // Find level of minimum theta-e (in lowest 400 hPa)
+    let sfc_p = p[0];
+    let limit_p = sfc_p - 400.0;
+    let mut min_te = f64::INFINITY;
+    let mut min_idx = 0;
+
+    for i in 0..p.len() {
+        if p[i] < limit_p {
+            break;
+        }
+        let te = thetae(p[i], t[i], td[i]);
+        if te < min_te {
+            min_te = te;
+            min_idx = i;
+        }
+    }
+
+    if min_idx == 0 {
+        return 0.0;
+    }
+
+    // Descend moist adiabatically from min theta-e level to surface
+    // Build descending pressure array
+    let mut desc_p: Vec<f64> = Vec::new();
+    for i in (0..=min_idx).rev() {
+        desc_p.push(p[i]);
+    }
+
+    let moist_temps = moist_lapse(&desc_p, t[min_idx]);
+
+    // Integrate DCAPE (only negative buoyancy = downdraft)
+    let mut dcape = 0.0;
+    let mut moist_i = 0;
+    for i in (0..min_idx).rev() {
+        moist_i += 1;
+        if moist_i >= moist_temps.len() {
+            break;
+        }
+        let t_parcel = moist_temps[moist_i];
+        let tv_parcel = virtual_temp(t_parcel, p[i], t_parcel);
+        let tv_env = virtual_temp(t[i], p[i], td[i]);
+
+        let buoyancy = tv_parcel - tv_env;
+        if buoyancy < 0.0 {
+            let dp = if i < min_idx {
+                (p[i].ln() - p[i + 1].ln()).abs()
+            } else {
+                0.0
+            };
+            dcape += RD * buoyancy.abs() * dp;
+        }
+    }
+
+    dcape
+}
+
+/// Mixed-layer average of a quantity in the lowest `depth_hpa` hPa.
+pub fn mixed_layer(p: &[f64], values: &[f64], depth_hpa: f64) -> f64 {
+    if p.is_empty() || values.is_empty() {
+        return 0.0;
+    }
+    let sfc_p = p[0];
+    let top_p = sfc_p - depth_hpa;
+
+    let mut sum = 0.0;
+    let mut total_dp = 0.0;
+
+    for i in 0..p.len() - 1 {
+        if p[i] < top_p {
+            break;
+        }
+        let p_top_layer = p[i + 1].max(top_p);
+        let dp = p[i] - p_top_layer;
+        if dp <= 0.0 {
+            continue;
+        }
+        let avg_val = (values[i] + values[i + 1]) / 2.0;
+        sum += avg_val * dp;
+        total_dp += dp;
+    }
+
+    if total_dp <= 0.0 { values[0] } else { sum / total_dp }
+}
+
+/// CAPE and CIN for a mixed-layer parcel.
+/// p, t, td: profiles (hPa, C, C). depth_hpa: mixed-layer depth (typically 100 hPa).
+pub fn mixed_layer_cape_cin(p: &[f64], t: &[f64], td: &[f64], depth_hpa: f64) -> (f64, f64) {
+    let (p_start, t_start, td_start) = get_mixed_layer_parcel(p, t, td, depth_hpa);
+    cape_cin_from_parcel(p, t, td, p_start, t_start, td_start)
+}
+
+/// CAPE and CIN for the most unstable parcel (highest theta-e in lowest 300 hPa).
+pub fn most_unstable_cape_cin(p: &[f64], t: &[f64], td: &[f64]) -> (f64, f64) {
+    let (p_start, t_start, td_start) = get_most_unstable_parcel(p, t, td, 300.0);
+    cape_cin_from_parcel(p, t, td, p_start, t_start, td_start)
+}
+
+/// CAPE and CIN for a surface-based parcel.
+pub fn surface_based_cape_cin(p: &[f64], t: &[f64], td: &[f64]) -> (f64, f64) {
+    if p.is_empty() {
+        return (0.0, 0.0);
+    }
+    cape_cin_from_parcel(p, t, td, p[0], t[0], td[0])
+}
+
+/// Internal: compute CAPE/CIN given a starting parcel.
+fn cape_cin_from_parcel(
+    p: &[f64], t: &[f64], td: &[f64],
+    p_start: f64, t_start: f64, td_start: f64,
+) -> (f64, f64) {
+    let (p_lcl, t_lcl) = drylift(p_start, t_start, td_start);
+
+    let theta_k = (t_lcl + ZEROCNK) * ((1000.0 / p_lcl).powf(ROCP));
+    let theta_c = theta_k - ZEROCNK;
+    let thetam = theta_c - wobf(theta_c) + wobf(t_lcl);
+
+    let theta_dry_k = (t_start + ZEROCNK) * ((1000.0 / p_start).powf(ROCP));
+    let r_parcel = mixratio(p_start, td_start);
+
+    let mut cape = 0.0_f64;
+    let mut cin = 0.0_f64;
+
+    for i in 1..p.len() {
+        let p1 = p[i - 1];
+        let p2 = p[i];
+        if p1 <= 0.0 || p2 <= 0.0 {
+            continue;
+        }
+        let p_mid = (p1 + p2) / 2.0;
+
+        // Environment Tv
+        let td_mid = (td[i - 1] + td[i]) / 2.0;
+        let t_mid = (t[i - 1] + t[i]) / 2.0;
+        let tv_env = virtual_temp(t_mid, p_mid, td_mid);
+
+        // Parcel Tv
+        let tv_parcel = if p_mid > p_lcl {
+            // Below LCL: dry adiabat
+            let t_parc_k = theta_dry_k * ((p_mid / 1000.0).powf(ROCP));
+            let t_parc = t_parc_k - ZEROCNK;
+            (t_parc + ZEROCNK) * (1.0 + 0.61 * (r_parcel / 1000.0)) - ZEROCNK
+        } else {
+            // Above LCL: moist adiabat
+            let t_parc = satlift(p_mid, thetam);
+            virtual_temp(t_parc, p_mid, t_parc)
+        };
+
+        let val = RD * (tv_parcel - tv_env) * (p1 / p2).ln();
+        if val > 0.0 {
+            cape += val;
+        } else {
+            cin += val;
+        }
+    }
+
+    (cape, cin)
+}
+
+/// Bunkers storm motion vectors.
+/// Returns ((u_rm, v_rm), (u_lm, v_lm)) for right-mover and left-mover.
+/// p: pressure (hPa), u,v: wind components (m/s), z: height AGL (m). Surface first.
+pub fn bunkers_storm_motion(
+    p: &[f64], u: &[f64], v: &[f64], z: &[f64],
+) -> ((f64, f64), (f64, f64)) {
+    // Mean wind in 0-6km layer
+    let mut sum_u = 0.0;
+    let mut sum_v = 0.0;
+    let mut count = 0.0;
+    for i in 0..z.len() {
+        if z[i] <= 6000.0 {
+            sum_u += u[i];
+            sum_v += v[i];
+            count += 1.0;
+        }
+    }
+    if count == 0.0 {
+        return ((0.0, 0.0), (0.0, 0.0));
+    }
+    let u_mean = sum_u / count;
+    let v_mean = sum_v / count;
+
+    // Shear vector: 0-6km
+    let (u_shr, v_shr) = {
+        // Find wind at ~6km
+        let mut u6 = u[0];
+        let mut v6 = v[0];
+        for i in 0..z.len() {
+            if z[i] <= 6000.0 {
+                u6 = u[i];
+                v6 = v[i];
+            }
+        }
+        (u6 - u[0], v6 - v[0])
+    };
+
+    let shear_mag = (u_shr * u_shr + v_shr * v_shr).sqrt();
+    let d = 7.5; // Bunkers deviation magnitude (m/s)
+
+    if shear_mag < 1e-6 {
+        return ((u_mean, v_mean), (u_mean, v_mean));
+    }
+
+    // Perpendicular to shear: rotate 90 degrees
+    let u_perp = -v_shr / shear_mag * d;
+    let v_perp = u_shr / shear_mag * d;
+
+    let u_rm = u_mean + u_perp;
+    let v_rm = v_mean + v_perp;
+    let u_lm = u_mean - u_perp;
+    let v_lm = v_mean - v_perp;
+
+    ((u_rm, v_rm), (u_lm, v_lm))
+}
+
+/// Corfidi storm motion vectors for MCS propagation.
+/// Returns ((u_upshear, v_upshear), (u_downshear, v_downshear)).
+/// p: pressure (hPa), u,v: wind (m/s), z: height AGL (m). Surface first.
+pub fn corfidi_storm_motion(
+    p: &[f64], u: &[f64], v: &[f64], z: &[f64],
+) -> ((f64, f64), (f64, f64)) {
+    // Mean cloud-layer wind (850-300 hPa)
+    let mut sum_u_cl = 0.0;
+    let mut sum_v_cl = 0.0;
+    let mut count_cl = 0.0;
+    for i in 0..p.len() {
+        if p[i] <= 850.0 && p[i] >= 300.0 {
+            sum_u_cl += u[i];
+            sum_v_cl += v[i];
+            count_cl += 1.0;
+        }
+    }
+    if count_cl == 0.0 {
+        return ((0.0, 0.0), (0.0, 0.0));
+    }
+    let u_cl = sum_u_cl / count_cl;
+    let v_cl = sum_v_cl / count_cl;
+
+    // Low-level jet (max wind in lowest 1.5km)
+    let mut max_spd = 0.0_f64;
+    let mut u_llj = u[0];
+    let mut v_llj = v[0];
+    for i in 0..z.len() {
+        if z[i] > 1500.0 {
+            break;
+        }
+        let spd = (u[i] * u[i] + v[i] * v[i]).sqrt();
+        if spd > max_spd {
+            max_spd = spd;
+            u_llj = u[i];
+            v_llj = v[i];
+        }
+    }
+
+    // Corfidi upshear: cloud-layer mean - LLJ
+    let u_up = u_cl - u_llj;
+    let v_up = v_cl - v_llj;
+
+    // Corfidi downshear: cloud-layer mean + (cloud-layer mean - LLJ)
+    let u_down = u_cl + u_up;
+    let v_down = v_cl + v_up;
+
+    ((u_up, v_up), (u_down, v_down))
+}
+
+/// Galvez-Davison Index (GDI) for tropical convection potential.
+/// All temperatures in Celsius. sst: sea surface temperature (C).
+pub fn galvez_davison_index(
+    t950: f64, t850: f64, t700: f64, t500: f64,
+    td950: f64, td850: f64, td700: f64, sst: f64,
+) -> f64 {
+    // Equivalent potential temperatures
+    let thetae_950 = equivalent_potential_temperature(950.0, t950, td950);
+    let thetae_850 = equivalent_potential_temperature(850.0, t850, td850);
+    let thetae_700 = equivalent_potential_temperature(700.0, t700, td700);
+
+    // Column buoyancy index (CBI)
+    let thetae_low = (thetae_950 + thetae_850) / 2.0;
+    let cbi = thetae_low - thetae_700;
+
+    // Mid-level warming index (MWI)
+    let t500_k = t500 + ZEROCNK;
+    let mwi = (t500_k - 243.15) * 1.5; // scaled departure from -30C reference
+
+    // Terrain correction / SST influence
+    let sst_k = sst + ZEROCNK;
+    let ii = (sst_k - 273.15 - 25.0).max(0.0) * 5.0; // inflow index
+
+    // GDI = CBI + II - MWI (simplified version)
+    cbi + ii - mwi
+}
+
+// =============================================================================
+// Dynamics (additional functions)
+// =============================================================================
+
+/// Exner function: Pi = (p/p0)^(R/Cp).
+pub fn exner_function(p_hpa: f64) -> f64 {
+    (p_hpa / 1000.0).powf(ROCP)
+}
+
+/// Montgomery streamfunction on an isentropic surface.
+/// Psi = Cp*T + g*z (J/kg).
+pub fn montgomery_streamfunction(theta_k: f64, p_hpa: f64, t_k: f64, z_m: f64) -> f64 {
+    let _ = theta_k; // theta identifies the surface but isn't used in the calculation
+    let _ = p_hpa;
+    CP * t_k + G * z_m
+}
+
+/// Ertel potential vorticity on isentropic surfaces.
+/// theta, p: vertical profiles at each point. u, v: wind components.
+/// lats: latitudes. Grid is nx*ny, nz levels. dx, dy: grid spacing (meters).
+/// Returns PV in PVU (1e-6 K m^2 / (kg s)) on a single level.
+/// Note: This is a simplified 2D PV computation on a single isentropic surface.
+pub fn potential_vorticity_baroclinic(
+    theta: &[f64], p: &[f64], u: &[f64], v: &[f64], lats: &[f64],
+    nx: usize, ny: usize, dx: f64, dy: f64,
+) -> Vec<f64> {
+    use crate::dynamics;
+    let n = nx * ny;
+    assert_eq!(theta.len(), n);
+    assert_eq!(p.len(), n);
+    assert_eq!(u.len(), n);
+    assert_eq!(v.len(), n);
+
+    let abs_vort = dynamics::absolute_vorticity(u, v, lats, nx, ny, dx, dy);
+
+    // dtheta/dp approximation: use the provided single-level fields
+    // For a proper calculation, you need multiple levels. Here we provide
+    // a simplified version using the stability parameter.
+    let mut pv = vec![0.0; n];
+    for k in 0..n {
+        // PV = -g * abs_vort * (d_theta/d_p)
+        // Since we only have one level, approximate d_theta/d_p from the field
+        let p_pa = p[k] * 100.0;
+        if p_pa > 0.0 {
+            // Simple estimate: assume a standard static stability
+            let dtheta_dp = -theta[k] / (p_pa * 4.0); // approximate
+            pv[k] = -G * abs_vort[k] * dtheta_dp * 1e6; // Convert to PVU
+        }
+    }
+    pv
+}
+
+/// Interpolate 3D fields to isentropic (constant potential temperature) surfaces.
+/// theta_levels: target theta values (K). p_3d, t_3d: flattened [nz][ny][nx].
+/// fields: additional fields to interpolate. Returns interpolated fields at each theta level.
+pub fn isentropic_interpolation(
+    theta_levels: &[f64],
+    p_3d: &[f64],
+    t_3d: &[f64],
+    fields: &[&[f64]],
+    nx: usize, ny: usize, nz: usize,
+) -> Vec<Vec<f64>> {
+    let n2d = nx * ny;
+    let n_theta = theta_levels.len();
+    let n_fields = fields.len();
+
+    // Output: for each field (including p and t), a flattened [n_theta][ny][nx] array
+    // We return: [pressure_on_theta, t_on_theta, field0_on_theta, field1_on_theta, ...]
+    let total_output = 2 + n_fields;
+    let mut output: Vec<Vec<f64>> = (0..total_output)
+        .map(|_| vec![f64::NAN; n_theta * n2d])
+        .collect();
+
+    // Compute theta at each 3D grid point
+    let mut theta_3d = vec![0.0; nz * n2d];
+    for k in 0..nz {
+        for j in 0..ny {
+            for i in 0..nx {
+                let idx3 = k * n2d + j * nx + i;
+                let t_k = t_3d[idx3];
+                let p_hpa = p_3d[idx3];
+                if p_hpa > 0.0 && t_k > 0.0 {
+                    theta_3d[idx3] = t_k * (1000.0 / p_hpa).powf(ROCP);
+                }
+            }
+        }
+    }
+
+    // For each grid column, interpolate to theta levels
+    for j in 0..ny {
+        for i in 0..nx {
+            let idx2 = j * nx + i;
+
+            // Extract column (bottom to top)
+            let mut col_theta = Vec::with_capacity(nz);
+            let mut col_p = Vec::with_capacity(nz);
+            let mut col_t = Vec::with_capacity(nz);
+            let mut col_fields: Vec<Vec<f64>> = (0..n_fields).map(|_| Vec::with_capacity(nz)).collect();
+
+            for k in 0..nz {
+                let idx3 = k * n2d + idx2;
+                col_theta.push(theta_3d[idx3]);
+                col_p.push(p_3d[idx3]);
+                col_t.push(t_3d[idx3]);
+                for f in 0..n_fields {
+                    col_fields[f].push(fields[f][idx3]);
+                }
+            }
+
+            // Interpolate each theta level
+            for (ti, &target_theta) in theta_levels.iter().enumerate() {
+                let out_idx = ti * n2d + idx2;
+
+                // Find bracketing levels (theta increases with height)
+                for k in 0..nz - 1 {
+                    let th_lo = col_theta[k];
+                    let th_hi = col_theta[k + 1];
+                    if (th_lo <= target_theta && th_hi >= target_theta)
+                        || (th_lo >= target_theta && th_hi <= target_theta)
+                    {
+                        let dth = th_hi - th_lo;
+                        if dth.abs() < 1e-10 {
+                            continue;
+                        }
+                        let frac = (target_theta - th_lo) / dth;
+                        output[0][out_idx] = col_p[k] + frac * (col_p[k + 1] - col_p[k]);
+                        output[1][out_idx] = col_t[k] + frac * (col_t[k + 1] - col_t[k]);
+                        for f in 0..n_fields {
+                            output[2 + f][out_idx] = col_fields[f][k]
+                                + frac * (col_fields[f][k + 1] - col_fields[f][k]);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    output
 }
 
 #[cfg(test)]

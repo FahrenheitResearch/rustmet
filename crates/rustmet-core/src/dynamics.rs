@@ -401,6 +401,136 @@ pub fn ageostrophic_wind(
 }
 
 // ─────────────────────────────────────────────
+// Curvature and shear vorticity
+// ─────────────────────────────────────────────
+
+/// Curvature vorticity — the component of vorticity arising from
+/// curvature of the streamlines.
+///
+/// For a 2D wind field (u, v):
+///   V = √(u² + v²)
+///   ψ = atan2(v, u)   (wind direction angle)
+///   ζ_c = V · (∂ψ/∂s)  where s is along-stream
+///       = V · [ (∂ψ/∂x)(u/V) + (∂ψ/∂y)(v/V) ]
+///       = u·(∂ψ/∂x) + v·(∂ψ/∂y)
+///
+/// ψ derivatives are computed via the chain rule:
+///   ∂ψ/∂x = (u·∂v/∂x - v·∂u/∂x) / V²
+///   ∂ψ/∂y = (u·∂v/∂y - v·∂u/∂y) / V²
+pub fn curvature_vorticity(
+    u: &[f64], v: &[f64], nx: usize, ny: usize, dx: f64, dy: f64,
+) -> Vec<f64> {
+    let n = nx * ny;
+    assert_eq!(u.len(), n);
+    assert_eq!(v.len(), n);
+
+    let dudx = gradient_x(u, nx, ny, dx);
+    let dudy = gradient_y(u, nx, ny, dy);
+    let dvdx = gradient_x(v, nx, ny, dx);
+    let dvdy = gradient_y(v, nx, ny, dy);
+
+    let mut out = vec![0.0; n];
+    for k in 0..n {
+        let spd2 = u[k] * u[k] + v[k] * v[k];
+        if spd2 < 1e-20 {
+            out[k] = 0.0;
+        } else {
+            // ∂ψ/∂x = (u dvdx - v dudx) / V²
+            let dpsidx = (u[k] * dvdx[k] - v[k] * dudx[k]) / spd2;
+            // ∂ψ/∂y = (u dvdy - v dudy) / V²
+            let dpsidy = (u[k] * dvdy[k] - v[k] * dudy[k]) / spd2;
+            // ζ_c = u * ∂ψ/∂x + v * ∂ψ/∂y
+            out[k] = u[k] * dpsidx + v[k] * dpsidy;
+        }
+    }
+    out
+}
+
+/// Shear vorticity — the component of vorticity arising from speed
+/// shear normal to the flow.
+///
+/// ζ_s = ζ - ζ_c  (total relative vorticity minus curvature vorticity)
+pub fn shear_vorticity(
+    u: &[f64], v: &[f64], nx: usize, ny: usize, dx: f64, dy: f64,
+) -> Vec<f64> {
+    let total = vorticity(u, v, nx, ny, dx, dy);
+    let curv = curvature_vorticity(u, v, nx, ny, dx, dy);
+    total.iter().zip(curv.iter()).map(|(t, c)| t - c).collect()
+}
+
+// ─────────────────────────────────────────────
+// Advanced dynamics
+// ─────────────────────────────────────────────
+
+/// Inertial-advective wind: the component of ageostrophic wind due to
+/// inertial advection of the geostrophic wind.
+///
+/// u_ia = u · ∂(u-u_g)/∂x + v · ∂(u-u_g)/∂y  ... actually the standard
+/// formulation is:
+///   V_ia = -(1/f) * (V · ∇) V_g  (where V is the total wind, V_g geostrophic)
+///
+/// Since this requires the Coriolis parameter, and the specification doesn't
+/// include lats, we compute the simpler kinematic form:
+///   u_ia = u·∂u_g/∂x + v·∂u_g/∂y
+///   v_ia = u·∂v_g/∂x + v·∂v_g/∂y
+///
+/// This is the advection of the geostrophic wind by the total wind.
+pub fn inertial_advective_wind(
+    u: &[f64], v: &[f64], u_geo: &[f64], v_geo: &[f64],
+    nx: usize, ny: usize, dx: f64, dy: f64,
+) -> (Vec<f64>, Vec<f64>) {
+    let n = nx * ny;
+    assert_eq!(u.len(), n);
+    assert_eq!(v.len(), n);
+    assert_eq!(u_geo.len(), n);
+    assert_eq!(v_geo.len(), n);
+
+    let dugdx = gradient_x(u_geo, nx, ny, dx);
+    let dugdy = gradient_y(u_geo, nx, ny, dy);
+    let dvgdx = gradient_x(v_geo, nx, ny, dx);
+    let dvgdy = gradient_y(v_geo, nx, ny, dy);
+
+    let mut u_ia = vec![0.0; n];
+    let mut v_ia = vec![0.0; n];
+    for k in 0..n {
+        u_ia[k] = u[k] * dugdx[k] + v[k] * dugdy[k];
+        v_ia[k] = u[k] * dvgdx[k] + v[k] * dvgdy[k];
+    }
+    (u_ia, v_ia)
+}
+
+/// Absolute momentum: M = u - f·y
+///
+/// `u`: zonal wind component (flattened grid).
+/// `lats`: latitude in degrees at each grid point.
+/// `y_distances`: distance from some reference latitude in meters.
+pub fn absolute_momentum(
+    u: &[f64], lats: &[f64], y_distances: &[f64],
+) -> Vec<f64> {
+    assert_eq!(u.len(), lats.len());
+    assert_eq!(u.len(), y_distances.len());
+    u.iter()
+        .zip(lats.iter().zip(y_distances.iter()))
+        .map(|(&ui, (&lat, &y))| {
+            let f = coriolis_parameter(lat);
+            ui - f * y
+        })
+        .collect()
+}
+
+/// Kinematic flux: element-wise product of a velocity component and a scalar.
+///
+/// Commonly used for turbulent flux calculations (e.g., u'θ', v'q').
+pub fn kinematic_flux(v_component: &[f64], scalar: &[f64]) -> Vec<f64> {
+    assert_eq!(v_component.len(), scalar.len());
+    v_component
+        .iter()
+        .zip(scalar.iter())
+        .map(|(v, s)| v * s)
+        .collect()
+}
+
+// ─────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────
 
@@ -680,6 +810,52 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_curvature_vorticity_solid_rotation() {
+        // Solid-body rotation: u = -y, v = x
+        // Vorticity = 2 everywhere. For solid rotation, curvature vorticity = 1
+        // and shear vorticity = 1 (each contributes half).
+        // Actually, for solid-body rotation: streamlines are circles,
+        // curvature vorticity ζ_c = V/R where V = R·ω, R = distance.
+        // For u = -y, v = x at (x,y), V = sqrt(x²+y²), R = V/ω = V/1 = V
+        // so ζ_c = V/(V/1) = 1.  ζ_s = ζ - ζ_c = 2 - 1 = 1.
+        let nx = 7;
+        let ny = 7;
+        let n = nx * ny;
+        let mut u = vec![0.0; n];
+        let mut v = vec![0.0; n];
+        // Center the rotation at (3,3)
+        for j in 0..ny {
+            for i in 0..nx {
+                let x = i as f64 - 3.0;
+                let y = j as f64 - 3.0;
+                u[j * nx + i] = -y;
+                v[j * nx + i] = x;
+            }
+        }
+        let curv = curvature_vorticity(&u, &v, nx, ny, 1.0, 1.0);
+        let shear = shear_vorticity(&u, &v, nx, ny, 1.0, 1.0);
+        // Check an interior point away from center (center has V=0, skip it)
+        // At (4,3): x=1, y=0, u=0, v=1
+        let k = 3 * nx + 4; // j=3, i=4
+        assert!(
+            (curv[k] - 1.0).abs() < 0.2,
+            "curvature vorticity at (4,3) = {}, expected ~1.0",
+            curv[k]
+        );
+        assert!(
+            (shear[k] - 1.0).abs() < 0.2,
+            "shear vorticity at (4,3) = {}, expected ~1.0",
+            shear[k]
+        );
+        // Their sum should be ~2.0 (total vorticity)
+        assert!(
+            (curv[k] + shear[k] - 2.0).abs() < 1e-10,
+            "curv + shear = {}, expected 2.0",
+            curv[k] + shear[k]
+        );
     }
 
     #[test]

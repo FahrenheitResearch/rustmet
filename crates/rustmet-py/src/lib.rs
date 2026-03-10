@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1};
 use rayon::prelude::*;
-use rustmet_core::{grib2, download, models, metfuncs, dynamics, composite, regrid, render};
+use rustmet_core::{grib2, download, models, metfuncs, dynamics, composite, regrid, render, gridmath};
 
 // ──────────────────────────────────────────────────────────
 // GribMessage — a single decoded GRIB2 field
@@ -2113,6 +2113,162 @@ fn ageostrophic_wind<'py>(
 }
 
 
+/// Curvature vorticity from 2D wind field.
+#[pyfunction]
+fn curvature_vorticity<'py>(
+    py: Python<'py>,
+    u: PyReadonlyArray1<f64>, v: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize, dx: f64, dy: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = dynamics::curvature_vorticity(u.as_slice()?, v.as_slice()?, nx, ny, dx, dy);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Shear vorticity from 2D wind field.
+#[pyfunction]
+fn shear_vorticity<'py>(
+    py: Python<'py>,
+    u: PyReadonlyArray1<f64>, v: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize, dx: f64, dy: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = dynamics::shear_vorticity(u.as_slice()?, v.as_slice()?, nx, ny, dx, dy);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Inertial-advective wind: advection of geostrophic wind by total wind.
+#[pyfunction]
+fn inertial_advective_wind<'py>(
+    py: Python<'py>,
+    u: PyReadonlyArray1<f64>, v: PyReadonlyArray1<f64>,
+    u_geo: PyReadonlyArray1<f64>, v_geo: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize, dx: f64, dy: f64,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (u_ia, v_ia) = dynamics::inertial_advective_wind(
+        u.as_slice()?, v.as_slice()?, u_geo.as_slice()?, v_geo.as_slice()?,
+        nx, ny, dx, dy,
+    );
+    let dict = PyDict::new(py);
+    dict.set_item("u_ia", PyArray1::from_vec(py, u_ia))?;
+    dict.set_item("v_ia", PyArray1::from_vec(py, v_ia))?;
+    Ok(dict)
+}
+
+/// Absolute momentum: M = u - f*y.
+#[pyfunction]
+fn absolute_momentum<'py>(
+    py: Python<'py>,
+    u: PyReadonlyArray1<f64>, lats: PyReadonlyArray1<f64>,
+    y_distances: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = dynamics::absolute_momentum(
+        u.as_slice()?, lats.as_slice()?, y_distances.as_slice()?,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Kinematic flux: element-wise product of velocity component and scalar.
+#[pyfunction]
+fn kinematic_flux<'py>(
+    py: Python<'py>,
+    v_component: PyReadonlyArray1<f64>, scalar: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = dynamics::kinematic_flux(v_component.as_slice()?, scalar.as_slice()?);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// First derivative along axis 0 (x) or axis 1 (y).
+#[pyfunction]
+fn first_derivative<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<f64>, axis_spacing: f64, axis: usize,
+    nx: usize, ny: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = gridmath::first_derivative(values.as_slice()?, axis_spacing, axis, nx, ny);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Second derivative along axis 0 (x) or axis 1 (y).
+#[pyfunction]
+fn second_derivative<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<f64>, axis_spacing: f64, axis: usize,
+    nx: usize, ny: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = gridmath::second_derivative(values.as_slice()?, axis_spacing, axis, nx, ny);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+// ------------------------------------------------------
+// Grid math (geospatial derivatives, smoothing)
+// ------------------------------------------------------
+
+/// Compute dx, dy in meters from lat/lon arrays using haversine. Returns dict with 'dx' and 'dy'.
+#[pyfunction]
+fn lat_lon_grid_deltas<'py>(
+    py: Python<'py>,
+    lats: PyReadonlyArray1<f64>, lons: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (dx, dy) = gridmath::lat_lon_grid_deltas(lats.as_slice()?, lons.as_slice()?, nx, ny);
+    let dict = PyDict::new(py);
+    dict.set_item("dx", PyArray1::from_vec(py, dx))?;
+    dict.set_item("dy", PyArray1::from_vec(py, dy))?;
+    Ok(dict)
+}
+
+/// Gradient accounting for map factor on lat/lon grid. Returns dict with 'dfdx' and 'dfdy'.
+#[pyfunction]
+fn geospatial_gradient<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<f64>,
+    lats: PyReadonlyArray1<f64>, lons: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (dfdx, dfdy) = gridmath::geospatial_gradient(
+        values.as_slice()?, lats.as_slice()?, lons.as_slice()?, nx, ny,
+    );
+    let dict = PyDict::new(py);
+    dict.set_item("dfdx", PyArray1::from_vec(py, dfdx))?;
+    dict.set_item("dfdy", PyArray1::from_vec(py, dfdy))?;
+    Ok(dict)
+}
+
+/// Laplacian on a lat/lon grid accounting for varying spacing.
+#[pyfunction]
+fn geospatial_laplacian<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<f64>,
+    lats: PyReadonlyArray1<f64>, lons: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = gridmath::geospatial_laplacian(
+        values.as_slice()?, lats.as_slice()?, lons.as_slice()?, nx, ny,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Rectangular moving-average smoother.
+#[pyfunction]
+fn smooth_window<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize, window_size: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = grib2::smooth_window(values.as_slice()?, nx, ny, window_size);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Circular kernel smoother (radius in grid-point units).
+#[pyfunction]
+fn smooth_circular<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize, radius: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = grib2::smooth_circular(values.as_slice()?, nx, ny, radius);
+    Ok(PyArray1::from_vec(py, result))
+}
+
 // ------------------------------------------------------
 // Regridding / Interpolation
 // ------------------------------------------------------
@@ -2522,11 +2678,24 @@ fn _rustmet(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(wind_components, m)?)?;
     m.add_function(wrap_pyfunction!(geostrophic_wind, m)?)?;
     m.add_function(wrap_pyfunction!(ageostrophic_wind, m)?)?;
+    m.add_function(wrap_pyfunction!(curvature_vorticity, m)?)?;
+    m.add_function(wrap_pyfunction!(shear_vorticity, m)?)?;
+    m.add_function(wrap_pyfunction!(inertial_advective_wind, m)?)?;
+    m.add_function(wrap_pyfunction!(absolute_momentum, m)?)?;
+    m.add_function(wrap_pyfunction!(kinematic_flux, m)?)?;
+    m.add_function(wrap_pyfunction!(first_derivative, m)?)?;
+    m.add_function(wrap_pyfunction!(second_derivative, m)?)?;
     // GRIB2 field operations
     m.add_function(wrap_pyfunction!(field_stats, m)?)?;
     m.add_function(wrap_pyfunction!(smooth, m)?)?;
     m.add_function(wrap_pyfunction!(convert_units, m)?)?;
     m.add_function(wrap_pyfunction!(wind_speed_dir, m)?)?;
+    // Grid math / geospatial
+    m.add_function(wrap_pyfunction!(lat_lon_grid_deltas, m)?)?;
+    m.add_function(wrap_pyfunction!(geospatial_gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(geospatial_laplacian, m)?)?;
+    m.add_function(wrap_pyfunction!(smooth_window, m)?)?;
+    m.add_function(wrap_pyfunction!(smooth_circular, m)?)?;
     // Data source / fallback functions
     m.add_function(wrap_pyfunction!(model_data_sources, m)?)?;
     // Regridding / Interpolation

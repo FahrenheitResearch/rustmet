@@ -40,6 +40,7 @@ pub mod products;
 pub mod projection;
 pub mod metfuncs;
 pub mod dynamics;
+pub mod gridmath;
 pub mod composite;
 pub mod regrid;
 pub mod render;

@@ -18,6 +18,7 @@ pub use ops::{
     merge, subset, filter, split, field_diff, field_stats, field_stats_region,
     FieldStats, FieldOp, apply_op, smooth_gaussian, smooth_n_point,
     mask_region, wind_speed_dir, rotate_winds, convert_units,
+    smooth_window, smooth_circular,
 };
 
 #[cfg(test)]

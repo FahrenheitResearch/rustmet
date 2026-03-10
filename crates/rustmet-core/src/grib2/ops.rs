@@ -440,6 +440,96 @@ pub fn smooth_n_point(values: &[f64], nx: usize, ny: usize, n: usize, passes: us
     current
 }
 
+/// Smooth a 2D field using a rectangular (box) moving average kernel.
+///
+/// `window_size` is the side length of the square window (must be odd;
+/// if even it is incremented by 1). NaN values are excluded from the average.
+pub fn smooth_window(values: &[f64], nx: usize, ny: usize, window_size: usize) -> Vec<f64> {
+    assert_eq!(values.len(), nx * ny, "smooth_window: length mismatch");
+
+    let ws = if window_size % 2 == 0 { window_size + 1 } else { window_size };
+    let half = (ws / 2) as isize;
+
+    if ws <= 1 {
+        return values.to_vec();
+    }
+
+    let mut result = vec![0.0; nx * ny];
+
+    for j in 0..ny {
+        for i in 0..nx {
+            let mut sum = 0.0;
+            let mut cnt = 0.0;
+            for dj in -half..=half {
+                let jj = j as isize + dj;
+                if jj < 0 || jj as usize >= ny {
+                    continue;
+                }
+                for di in -half..=half {
+                    let ii = i as isize + di;
+                    if ii < 0 || ii as usize >= nx {
+                        continue;
+                    }
+                    let v = values[jj as usize * nx + ii as usize];
+                    if !v.is_nan() {
+                        sum += v;
+                        cnt += 1.0;
+                    }
+                }
+            }
+            result[j * nx + i] = if cnt > 0.0 { sum / cnt } else { f64::NAN };
+        }
+    }
+    result
+}
+
+/// Smooth a 2D field using a circular kernel of the given `radius`
+/// (in grid-point units).
+///
+/// Points within `radius` of each grid cell contribute equally to the
+/// average. NaN values are excluded.
+pub fn smooth_circular(values: &[f64], nx: usize, ny: usize, radius: f64) -> Vec<f64> {
+    assert_eq!(values.len(), nx * ny, "smooth_circular: length mismatch");
+
+    if radius <= 0.0 {
+        return values.to_vec();
+    }
+
+    let half = radius.ceil() as isize;
+    let r2 = radius * radius;
+    let mut result = vec![0.0; nx * ny];
+
+    for j in 0..ny {
+        for i in 0..nx {
+            let mut sum = 0.0;
+            let mut cnt = 0.0;
+            for dj in -half..=half {
+                let jj = j as isize + dj;
+                if jj < 0 || jj as usize >= ny {
+                    continue;
+                }
+                for di in -half..=half {
+                    let ii = i as isize + di;
+                    if ii < 0 || ii as usize >= nx {
+                        continue;
+                    }
+                    let dist2 = (di * di + dj * dj) as f64;
+                    if dist2 > r2 {
+                        continue;
+                    }
+                    let v = values[jj as usize * nx + ii as usize];
+                    if !v.is_nan() {
+                        sum += v;
+                        cnt += 1.0;
+                    }
+                }
+            }
+            result[j * nx + i] = if cnt > 0.0 { sum / cnt } else { f64::NAN };
+        }
+    }
+    result
+}
+
 // ═══════════════════════════════════════════════════════════
 // Masking
 // ═══════════════════════════════════════════════════════════
@@ -998,5 +1088,42 @@ mod tests {
         assert!((values[1] - 2.0).abs() < 1e-10); // outside, kept
         assert!(values[2].is_nan()); // inside, masked
         assert!(values[3].is_nan()); // inside, masked
+    }
+
+    #[test]
+    fn test_smooth_window() {
+        // 3x3 field, center value is high
+        let values = vec![0.0, 0.0, 0.0, 0.0, 100.0, 0.0, 0.0, 0.0, 0.0];
+        let smoothed = smooth_window(&values, 3, 3, 3);
+        // Center: average of all 9 values = 100/9 ≈ 11.11
+        assert!(
+            (smoothed[4] - 100.0 / 9.0).abs() < 1e-10,
+            "center = {}, expected {}",
+            smoothed[4],
+            100.0 / 9.0
+        );
+        // Corner (0,0): average of 4 values (0,0), (1,0), (0,1), (1,1) = 100/4 = 25
+        // Actually corner (0,0) sees (0,0),(1,0),(0,1),(1,1) = 0+0+0+100 = 100, /4 = 25
+        assert!(
+            (smoothed[0] - 25.0).abs() < 1e-10,
+            "corner = {}, expected 25.0",
+            smoothed[0]
+        );
+    }
+
+    #[test]
+    fn test_smooth_circular() {
+        // 5x5, center spike
+        let mut values = vec![0.0; 25];
+        values[12] = 100.0; // center
+        let smoothed = smooth_circular(&values, 5, 5, 1.0);
+        // With radius 1.0, the kernel includes the center + 4 cardinal neighbors
+        // (diagonals have dist sqrt(2) > 1.0)
+        // So center = (100 + 0 + 0 + 0 + 0) / 5 = 20
+        assert!(
+            (smoothed[12] - 20.0).abs() < 1e-10,
+            "center = {}, expected 20.0",
+            smoothed[12]
+        );
     }
 }
