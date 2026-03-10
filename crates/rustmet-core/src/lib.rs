@@ -39,7 +39,9 @@ pub mod models;
 pub mod products;
 pub mod projection;
 pub mod metfuncs;
+pub mod dynamics;
 pub mod composite;
+pub mod regrid;
 pub mod render;
 
 pub use error::{RustmetError, Result};

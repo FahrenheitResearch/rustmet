@@ -7,6 +7,14 @@ pub mod nbm;
 pub mod rrfs;
 pub mod rtma;
 pub mod href;
+pub mod era5;
+pub mod gefs;
+pub mod hrrr_ak;
+pub mod cfs;
+pub mod sref;
+pub mod wpc;
+pub mod urma;
+pub mod mrms;
 #[cfg(feature = "network")]
 pub mod latest;
 
@@ -19,5 +27,13 @@ pub use nbm::NbmConfig;
 pub use rrfs::RrfsConfig;
 pub use rtma::RtmaConfig;
 pub use href::HrefConfig;
+pub use era5::Era5Config;
+pub use gefs::GefsConfig;
+pub use hrrr_ak::HrrrAkConfig;
+pub use cfs::CfsConfig;
+pub use sref::SrefConfig;
+pub use wpc::WpcConfig;
+pub use urma::UrmaConfig;
+pub use mrms::MrmsConfig;
 #[cfg(feature = "network")]
 pub use latest::find_latest_run;

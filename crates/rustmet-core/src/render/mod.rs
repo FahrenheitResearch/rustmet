@@ -12,4 +12,10 @@
 pub mod colormap;
 pub mod raster;
 pub mod contour;
+pub mod filled_contour;
+pub mod overlay;
 pub mod encode;
+pub mod skewt;
+pub mod hodograph;
+pub mod station;
+pub mod cross_section;

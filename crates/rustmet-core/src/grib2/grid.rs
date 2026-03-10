@@ -9,10 +9,12 @@ pub fn grid_latlon(grid: &GridDefinition) -> (Vec<f64>, Vec<f64>) {
 
     match grid.template {
         0 => latlon_grid(grid, nx, ny, n),
+        1 => rotated_latlon_grid(grid, nx, ny, n),
         10 => mercator_grid(grid, nx, ny, n),
         20 => polar_stereo_grid(grid, nx, ny, n),
         30 => lambert_grid(grid, nx, ny, n),
         40 => gaussian_grid(grid, nx, ny, n),
+        90 => space_view_grid(grid, nx, ny, n),
         _ => {
             // Return empty vectors for unknown templates
             (Vec::new(), Vec::new())
@@ -271,6 +273,177 @@ fn lambert_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f
             } else {
                 lon
             };
+
+            lats.push(lat);
+            lons.push(lon);
+        }
+    }
+
+    (lats, lons)
+}
+
+/// Template 3.1: Rotated Latitude/Longitude grid.
+///
+/// First computes the regular lat/lon coordinates on the rotated grid,
+/// then transforms them back to geographic (unrotated) coordinates using
+/// the south pole of rotation.
+fn rotated_latlon_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f64>, Vec<f64>) {
+    // Start with regular lat/lon on the rotated grid
+    let (rot_lats, rot_lons) = latlon_grid(grid, nx, ny, n);
+
+    let mut lats = Vec::with_capacity(n);
+    let mut lons = Vec::with_capacity(n);
+
+    let deg2rad = std::f64::consts::PI / 180.0;
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    // South pole of the rotated grid
+    let sp_lat = grid.south_pole_lat * deg2rad;
+    let sp_lon = grid.south_pole_lon * deg2rad;
+    let rot_angle = grid.rotation_angle * deg2rad;
+
+    // North pole of rotated system is at (-sp_lat, sp_lon + pi)
+    let alpha = -sp_lat; // latitude of rotated north pole
+    let sin_alpha = alpha.sin();
+    let cos_alpha = alpha.cos();
+
+    for idx in 0..n {
+        let rlat = rot_lats[idx] * deg2rad;
+        let rlon = rot_lons[idx] * deg2rad - rot_angle;
+
+        let sin_rlat = rlat.sin();
+        let cos_rlat = rlat.cos();
+        let sin_rlon = rlon.sin();
+        let cos_rlon = rlon.cos();
+
+        // Geographic latitude
+        let lat_geo = (sin_rlat * sin_alpha + cos_rlat * cos_rlon * cos_alpha).asin();
+
+        // Geographic longitude
+        // Standard formula: lon = atan2(cos(rlat)*sin(rlon),
+        //   cos(rlat)*cos(rlon)*sin(alpha) - sin(rlat)*cos(alpha)) + sp_lon
+        let lon_geo = (cos_rlat * sin_rlon).atan2(
+            cos_rlat * cos_rlon * sin_alpha - sin_rlat * cos_alpha
+        ) + sp_lon;
+
+        lats.push(lat_geo * rad2deg);
+
+        // Normalize longitude to [-180, 360)
+        let mut lon_deg = lon_geo * rad2deg;
+        while lon_deg < -180.0 {
+            lon_deg += 360.0;
+        }
+        while lon_deg >= 360.0 {
+            lon_deg -= 360.0;
+        }
+        lons.push(lon_deg);
+    }
+
+    (lats, lons)
+}
+
+/// Transform a single point from rotated to geographic coordinates.
+///
+/// `south_pole_lat` and `south_pole_lon` are in degrees.
+/// `rotation_angle` is in degrees.
+/// Returns (geo_lat, geo_lon) in degrees.
+pub fn rotated_to_geographic(
+    rot_lat: f64,
+    rot_lon: f64,
+    south_pole_lat: f64,
+    south_pole_lon: f64,
+    rotation_angle: f64,
+) -> (f64, f64) {
+    let deg2rad = std::f64::consts::PI / 180.0;
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    let sp_lat = south_pole_lat * deg2rad;
+    let sp_lon = south_pole_lon * deg2rad;
+
+    let rlat = rot_lat * deg2rad;
+    let rlon = (rot_lon - rotation_angle) * deg2rad;
+
+    let alpha = -sp_lat;
+    let sin_alpha = alpha.sin();
+    let cos_alpha = alpha.cos();
+
+    let sin_rlat = rlat.sin();
+    let cos_rlat = rlat.cos();
+    let sin_rlon = rlon.sin();
+    let cos_rlon = rlon.cos();
+
+    let lat_geo = (sin_rlat * sin_alpha + cos_rlat * cos_rlon * cos_alpha).asin();
+    let lon_geo = (cos_rlat * sin_rlon).atan2(
+        cos_rlat * cos_rlon * sin_alpha - sin_rlat * cos_alpha
+    ) + sp_lon;
+
+    let mut lon_deg = lon_geo * rad2deg;
+    while lon_deg < -180.0 {
+        lon_deg += 360.0;
+    }
+    while lon_deg >= 360.0 {
+        lon_deg -= 360.0;
+    }
+
+    (lat_geo * rad2deg, lon_deg)
+}
+
+/// Template 3.90: Space View Perspective (satellite imagery).
+///
+/// Simplified inverse projection for geostationary satellite imagery.
+fn space_view_grid(grid: &GridDefinition, nx: usize, ny: usize, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut lats = Vec::with_capacity(n);
+    let mut lons = Vec::with_capacity(n);
+
+    let rad2deg = 180.0 / std::f64::consts::PI;
+
+    let r_earth = 6_371_229.0_f64;
+    let h = grid.altitude + r_earth;
+
+    let cfac = if grid.dx > 0.0 { grid.dx } else { 1.0 };
+    let lfac = if grid.dy > 0.0 { grid.dy } else { 1.0 };
+
+    let xp = grid.xp;
+    let yp = grid.yp;
+
+    for j in 0..ny {
+        for i in 0..nx {
+            let x = (i as f64 - xp) / cfac;
+            let y = (j as f64 - yp) / lfac;
+
+            let cos_x = x.cos();
+            let cos_y = y.cos();
+            let sin_x = x.sin();
+            let sin_y = y.sin();
+
+            let a = sin_x * sin_x
+                + cos_x * cos_x * (cos_y * cos_y + (r_earth / h).powi(2) * sin_y * sin_y);
+            let sd = (h * cos_x * cos_y).powi(2)
+                - (cos_x * cos_x + (h / r_earth).powi(2) * sin_x * sin_x)
+                    * (h * h - r_earth * r_earth);
+
+            if sd < 0.0 {
+                lats.push(f64::NAN);
+                lons.push(f64::NAN);
+                continue;
+            }
+
+            let sn = (h * cos_x * cos_y - sd.sqrt()) / a;
+
+            let s1 = h - sn * cos_x * cos_y;
+            let s2 = sn * sin_x * cos_y;
+            let s3 = -sn * sin_y;
+
+            let sxy = (s1 * s1 + s2 * s2).sqrt();
+
+            let lat = (s3 / sxy).atan() * rad2deg;
+            let mut lon = (s2 / s1).atan() * rad2deg + grid.satellite_lon;
+
+            if lon > 360.0 {
+                lon -= 360.0;
+            } else if lon < -180.0 {
+                lon += 360.0;
+            }
 
             lats.push(lat);
             lons.push(lon);

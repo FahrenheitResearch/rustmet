@@ -277,7 +277,181 @@ def _parse_fhour_spec(fhour):
     raise TypeError(f"fhour must be int, list, or str, got {type(fhour).__name__}")
 
 
-# Wrap the native fetch to support string range syntax (e.g. "0-6", "0,3,6")
+# --------------------------------------------------------------------------
+# Variable Group Catalog
+# --------------------------------------------------------------------------
+
+# Pre-defined variable groups for common weather analysis tasks.
+_VARIABLE_GROUPS = {
+    "surface_basic": {
+        "description": "Basic surface variables (T2m, Td2m, wind, pressure)",
+        "patterns": ["TMP:2 m", "DPT:2 m", "UGRD:10 m", "VGRD:10 m",
+                      "PRES:surface", "MSLMA"],
+    },
+    "surface_precip": {
+        "description": "Precipitation and moisture",
+        "patterns": ["APCP:surface", "CRAIN:surface", "CFRZR:surface",
+                      "CICEP:surface", "CSNOW:surface", "PRATE:surface"],
+    },
+    "severe": {
+        "description": "Severe weather parameters",
+        "patterns": ["CAPE:surface", "CIN:surface", "REFC:entire",
+                      "MXUPHL", "USTM:6000", "VSTM:6000", "HLCY:3000"],
+    },
+    "upper_air": {
+        "description": "Standard pressure level analysis",
+        "patterns": ["HGT:500 mb", "HGT:250 mb", "TMP:850 mb", "TMP:700 mb",
+                      "TMP:500 mb", "UGRD:250 mb", "VGRD:250 mb",
+                      "VVEL:700 mb", "RH:700 mb"],
+    },
+    "winter": {
+        "description": "Winter weather variables",
+        "patterns": ["SNOD:surface", "WEASD:surface", "CSNOW:surface",
+                      "CFRZR:surface", "CICEP:surface", "TMP:2 m",
+                      "TMP:surface", "TMP:850 mb"],
+    },
+    "fire_weather": {
+        "description": "Fire weather variables",
+        "patterns": ["TMP:2 m", "RH:2 m", "UGRD:10 m", "VGRD:10 m",
+                      "GUST:surface", "VIS:surface", "HINDEX:surface"],
+    },
+    "aviation": {
+        "description": "Aviation weather",
+        "patterns": ["VIS:surface", "CEIL:cloud ceiling", "LCDC", "MCDC",
+                      "HCDC", "GUST:surface", "UGRD:80 m", "VGRD:80 m",
+                      "ICIP", "ICSEV"],
+    },
+    "marine": {
+        "description": "Marine weather",
+        "patterns": ["UGRD:10 m", "VGRD:10 m", "GUST:surface", "PRMSL",
+                      "HTSGW", "WVHGT", "WVPER", "WVDIR"],
+    },
+    "radiation": {
+        "description": "Radiation and energy budget",
+        "patterns": ["DSWRF:surface", "DLWRF:surface", "USWRF:surface",
+                      "ULWRF:surface", "USWRF:top of atmosphere",
+                      "ULWRF:top of atmosphere"],
+    },
+    "turbulence": {
+        "description": "Boundary layer and turbulence",
+        "patterns": ["HPBL:surface", "FRICV:surface", "GUST:surface",
+                      "VUCSH:0-1000", "VVCSH:0-1000", "TKE"],
+    },
+    "moisture": {
+        "description": "Moisture and instability",
+        "patterns": ["PWAT:entire", "RH:2 m", "RH:700 mb", "RH:850 mb",
+                      "CAPE:surface", "CIN:surface", "CAPE:255-0 mb",
+                      "CIN:255-0 mb", "LFTX:500-1000", "4LFTX:180-0 mb"],
+    },
+    "full_sounding": {
+        "description": "All standard pressure levels for sounding analysis",
+        "patterns": None,  # dynamically generated
+    },
+}
+
+_SOUNDING_LEVELS = [
+    1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700,
+    675, 650, 625, 600, 575, 550, 525, 500, 475, 450, 425, 400, 375,
+    350, 325, 300, 275, 250, 225, 200, 175, 150, 125, 100,
+]
+
+
+def _expand_full_sounding():
+    patterns = []
+    for var in ("TMP", "RH", "UGRD", "VGRD", "HGT"):
+        for level in _SOUNDING_LEVELS:
+            patterns.append(f"{var}:{level} mb")
+    return patterns
+
+
+def var_groups():
+    """List predefined variable groups with their descriptions.
+
+    Returns a dict mapping group name to description string.
+
+    Example::
+
+        for name, desc in rustmet.var_groups().items():
+            print(f"  {name:20s} {desc}")
+    """
+    return {name: info["description"] for name, info in _VARIABLE_GROUPS.items()}
+
+
+def expand_var_group(name):
+    """Expand a variable group name to its list of .idx search patterns.
+
+    Args:
+        name: Group name (e.g., "severe", "winter", "full_sounding")
+
+    Returns:
+        list of str patterns, or None if the group name is not recognized.
+
+    Example::
+
+        patterns = rustmet.expand_var_group("severe")
+        # ['CAPE:surface', 'CIN:surface', 'REFC:entire', ...]
+    """
+    if name not in _VARIABLE_GROUPS:
+        return None
+    if name == "full_sounding":
+        return _expand_full_sounding()
+    return list(_VARIABLE_GROUPS[name]["patterns"])
+
+
+def _expand_vars(vars_spec):
+    """Expand a vars argument, resolving group names to patterns."""
+    if vars_spec is None:
+        return None
+    if isinstance(vars_spec, str):
+        expanded = expand_var_group(vars_spec)
+        if expanded is not None:
+            return expanded
+        return [vars_spec]
+    result = []
+    seen = set()
+    for v in vars_spec:
+        expanded = expand_var_group(v)
+        if expanded is not None:
+            for pat in expanded:
+                if pat not in seen:
+                    seen.add(pat)
+                    result.append(pat)
+        else:
+            if v not in seen:
+                seen.add(v)
+                result.append(v)
+    return result
+
+
+def available_hours(model, run, product="sfc"):
+    """Discover which forecast hours are available for a model run.
+
+    Probes the data server to find which forecast hours have .idx files
+    available. Uses parallel HEAD requests for speed.
+
+    Args:
+        model: Model name ("hrrr", "gfs", "nam", "rap")
+        run: Run time as "YYYY-MM-DD/HHz" (e.g., "2026-03-10/00z")
+        product: Product type ("sfc", "prs", "nat", "subh") -- default "sfc"
+
+    Returns:
+        Sorted list of available forecast hours (ints).
+
+    Example::
+
+        hours = rustmet.available_hours("hrrr", "2026-03-10/00z")
+        # [0, 1, 2, 3, ..., 18]
+    """
+    try:
+        client = Client()
+        return client.available_hours(model, run, product)
+    except (NameError, AttributeError):
+        raise RuntimeError(
+            "available_hours requires the native rustmet module with network support"
+        )
+
+
+# Wrap the native fetch to support string range syntax and variable group expansion
 try:
     _native_fetch = fetch
 
@@ -294,13 +468,17 @@ try:
                 - str: "0-6" (range), "0,3,6,9" (comma-separated),
                        "0-12:3" (range with step)
             product: "prs", "sfc", "nat", or "subh" (default "prs")
-            vars: List of variable patterns (e.g. ["TMP:2 m above ground"])
+            vars: Variable filter. Accepts:
+                - list of str patterns (e.g. ["TMP:2 m above ground"])
+                - str group name (e.g. "severe", "winter", "fire_weather")
+                - list mixing patterns and group names
 
         Returns:
             GribFile (single fhour) or list[GribFile] (multiple fhours)
         """
         parsed = _parse_fhour_spec(fhour)
-        return _native_fetch(model, run, parsed, product, vars)
+        expanded_vars = _expand_vars(vars)
+        return _native_fetch(model, run, parsed, product, expanded_vars)
 except NameError:
     pass  # native module not built
 
@@ -637,4 +815,8 @@ __all__ = [
     "plot",
     "render",
     "colormaps",
+    # Inventory management
+    "var_groups",
+    "expand_var_group",
+    "available_hours",
 ]

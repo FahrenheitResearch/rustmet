@@ -212,19 +212,252 @@ pub static VORTICITY: &[ColorStop] = &[
     (1.000, 0x91, 0xff, 0xfd), // cyan
 ];
 
+// ============================================================
+// Dewpoint colormap: browns (dry) -> greens -> blues/purple (moist)
+// Designed for dewpoint temperatures, shifted from temperature scale
+// ============================================================
+pub static DEWPOINT: &[ColorStop] = &[
+    (0.000, 0x8B, 0x45, 0x13), // saddle brown (very dry)
+    (0.100, 0xA0, 0x6A, 0x3A), // brown
+    (0.200, 0xC4, 0x9E, 0x6C), // tan
+    (0.300, 0xD2, 0xC4, 0x8A), // pale goldenrod
+    (0.400, 0x8F, 0xBC, 0x5E), // yellow-green
+    (0.500, 0x4C, 0xAF, 0x50), // green
+    (0.600, 0x2E, 0x7D, 0x32), // dark green
+    (0.700, 0x00, 0x88, 0x88), // teal
+    (0.800, 0x1E, 0x90, 0xFF), // dodger blue
+    (0.900, 0x4B, 0x00, 0x82), // indigo
+    (1.000, 0x80, 0x00, 0x80), // purple (very moist)
+];
+
+// ============================================================
+// Pressure colormap: diverging blue-white-red centered on 1013 mb
+// ============================================================
+pub static PRESSURE: &[ColorStop] = &[
+    (0.000, 0x08, 0x30, 0x6B), // deep blue (low pressure)
+    (0.125, 0x21, 0x66, 0xAC),
+    (0.250, 0x4B, 0x96, 0xD0),
+    (0.375, 0x92, 0xC5, 0xDE),
+    (0.450, 0xD1, 0xE5, 0xF0),
+    (0.500, 0xF7, 0xF7, 0xF7), // white (1013 center)
+    (0.550, 0xF4, 0xD1, 0xC0),
+    (0.625, 0xDA, 0x8A, 0x67),
+    (0.750, 0xC4, 0x4E, 0x34),
+    (0.875, 0xA1, 0x25, 0x12),
+    (1.000, 0x67, 0x00, 0x1F), // deep red (high pressure)
+];
+
+// ============================================================
+// Snow accumulation colormap: white -> light blue -> dark blue/purple
+// Designed for 0-36+ inches
+// ============================================================
+pub static SNOW: &[ColorStop] = &[
+    (0.000, 0xFF, 0xFF, 0xFF), // white (trace)
+    (0.100, 0xE0, 0xF0, 0xFF), // very light blue
+    (0.200, 0xBE, 0xDD, 0xF5), // light blue
+    (0.300, 0x87, 0xCE, 0xEB), // sky blue
+    (0.400, 0x52, 0xA5, 0xD9), // steel blue
+    (0.500, 0x31, 0x7F, 0xCA), // medium blue
+    (0.600, 0x1E, 0x5A, 0xB0), // dark blue
+    (0.700, 0x15, 0x3E, 0x90), // navy
+    (0.800, 0x48, 0x2E, 0x8E), // purple
+    (0.900, 0x6B, 0x24, 0x98), // dark purple
+    (1.000, 0x9C, 0x27, 0xB0), // bright purple (extreme)
+];
+
+// ============================================================
+// Ice accretion colormap: cyan/teal scale
+// Designed for 0-2+ inches
+// ============================================================
+pub static ICE: &[ColorStop] = &[
+    (0.000, 0xF0, 0xFF, 0xFF), // azure white
+    (0.125, 0xCC, 0xF5, 0xF0), // very pale teal
+    (0.250, 0x99, 0xE6, 0xDA), // light teal
+    (0.375, 0x66, 0xCC, 0xCC), // medium teal
+    (0.500, 0x33, 0xAA, 0xAA), // teal
+    (0.625, 0x00, 0x88, 0x88), // dark teal
+    (0.750, 0x00, 0x66, 0x66), // deeper teal
+    (0.875, 0x00, 0x44, 0x55), // very dark teal
+    (1.000, 0x00, 0x2B, 0x36), // near-black teal
+];
+
+// ============================================================
+// Visibility colormap: red (low) -> yellow -> green (high)
+// Designed for 0-10+ miles
+// ============================================================
+pub static VISIBILITY: &[ColorStop] = &[
+    (0.000, 0x8B, 0x00, 0x00), // dark red (near-zero vis)
+    (0.100, 0xCC, 0x00, 0x00), // red
+    (0.200, 0xFF, 0x45, 0x00), // orange-red
+    (0.300, 0xFF, 0x8C, 0x00), // dark orange
+    (0.400, 0xFF, 0xC1, 0x07), // amber
+    (0.500, 0xFF, 0xEB, 0x3B), // yellow
+    (0.600, 0xCD, 0xDC, 0x39), // yellow-green
+    (0.700, 0x8B, 0xC3, 0x4A), // light green
+    (0.800, 0x4C, 0xAF, 0x50), // green
+    (0.900, 0x2E, 0x7D, 0x32), // dark green
+    (1.000, 0x1B, 0x5E, 0x20), // very dark green (unlimited vis)
+];
+
+// ============================================================
+// Cloud cover colormap: white (clear) -> gray -> dark (overcast)
+// Designed for 0-100%
+// ============================================================
+pub static CLOUD_COVER: &[ColorStop] = &[
+    (0.000, 0xFF, 0xFF, 0xFF), // white (clear sky)
+    (0.125, 0xF0, 0xF0, 0xF0),
+    (0.250, 0xD0, 0xD0, 0xD0),
+    (0.375, 0xB0, 0xB0, 0xB0),
+    (0.500, 0x90, 0x90, 0x90),
+    (0.625, 0x70, 0x70, 0x70),
+    (0.750, 0x55, 0x55, 0x55),
+    (0.875, 0x3A, 0x3A, 0x3A),
+    (1.000, 0x20, 0x20, 0x20), // near-black (total overcast)
+];
+
+// ============================================================
+// Helicity (SRH) colormap: diverging purple-white-orange
+// Designed for -500 to +500 m2/s2
+// ============================================================
+pub static HELICITY: &[ColorStop] = &[
+    (0.000, 0x4A, 0x00, 0x82), // dark purple (strong negative)
+    (0.125, 0x6A, 0x1B, 0x9A),
+    (0.250, 0x9C, 0x4D, 0xCC),
+    (0.375, 0xCE, 0x93, 0xD8),
+    (0.450, 0xE8, 0xD0, 0xF0),
+    (0.500, 0xF7, 0xF7, 0xF7), // white (zero)
+    (0.550, 0xFD, 0xE0, 0xC0),
+    (0.625, 0xFD, 0xAE, 0x61),
+    (0.750, 0xF4, 0x6D, 0x0F),
+    (0.875, 0xD9, 0x48, 0x01),
+    (1.000, 0x8C, 0x2D, 0x04), // dark orange (strong positive)
+];
+
+// ============================================================
+// Divergence colormap: blue(convergence)-white-red(divergence)
+// ============================================================
+pub static DIVERGENCE: &[ColorStop] = &[
+    (0.000, 0x08, 0x30, 0x6B), // deep blue (strong convergence)
+    (0.125, 0x21, 0x66, 0xAC),
+    (0.250, 0x4B, 0x96, 0xD0),
+    (0.375, 0x92, 0xC5, 0xDE),
+    (0.450, 0xD1, 0xE5, 0xF0),
+    (0.500, 0xF7, 0xF7, 0xF7), // white (zero)
+    (0.550, 0xF4, 0xCA, 0xC0),
+    (0.625, 0xEF, 0x8A, 0x62),
+    (0.750, 0xDA, 0x4E, 0x2B),
+    (0.875, 0xB2, 0x18, 0x2B),
+    (1.000, 0x67, 0x00, 0x1F), // deep red (strong divergence)
+];
+
+// ============================================================
+// Theta-E (equivalent potential temperature) colormap
+// Similar to temperature but shifted for theta-e range (280-380K)
+// ============================================================
+pub static THETA_E: &[ColorStop] = &[
+    (0.000, 0x08, 0x30, 0x6B), // deep blue (cold/dry air)
+    (0.100, 0x21, 0x66, 0xAC),
+    (0.200, 0x4B, 0x96, 0xD0),
+    (0.300, 0x92, 0xC5, 0xDE),
+    (0.400, 0xBE, 0xDD, 0x72), // yellow-green
+    (0.500, 0xFE, 0xEB, 0x65), // yellow
+    (0.600, 0xFD, 0xAE, 0x61), // orange
+    (0.700, 0xF4, 0x6D, 0x43), // red-orange
+    (0.800, 0xD7, 0x30, 0x27), // red
+    (0.900, 0xA5, 0x00, 0x26), // dark red
+    (1.000, 0x67, 0x00, 0x1F), // very dark red (warm/moist)
+];
+
+// ============================================================
+// NWS Reflectivity colormap: exact NWS radar color table
+// <5 dBZ transparent, 5-75 dBZ standard NWS colors
+// ============================================================
+pub static NWS_REFLECTIVITY: &[ColorStop] = &[
+    (0.000, 0x00, 0x00, 0x00), // <5 dBZ: no echo (use as transparent)
+    (0.067, 0x00, 0x00, 0x00), // 5 dBZ boundary
+    (0.070, 0x04, 0xE9, 0xE7), // light cyan-green
+    (0.143, 0x01, 0xA0, 0x14), // green (20 dBZ)
+    (0.214, 0x00, 0xC8, 0x00), // bright green
+    (0.286, 0x02, 0xEB, 0x02), // light green (25 dBZ)
+    (0.357, 0xFA, 0xFB, 0x00), // yellow (30 dBZ)
+    (0.429, 0xEB, 0xCF, 0x00), // dark yellow (35 dBZ)
+    (0.500, 0xFF, 0x9C, 0x00), // orange (40 dBZ)
+    (0.571, 0xFF, 0x00, 0x00), // red (45 dBZ)
+    (0.643, 0xD4, 0x00, 0x00), // dark red (50 dBZ)
+    (0.714, 0xC0, 0x00, 0x00), // darker red (55 dBZ)
+    (0.786, 0xFF, 0x00, 0xF0), // magenta (60 dBZ)
+    (0.857, 0x98, 0x54, 0xC6), // purple (65 dBZ)
+    (0.929, 0xFF, 0xFF, 0xFF), // white (70+ dBZ)
+    (1.000, 0xE0, 0xE0, 0xE0), // light gray (75+ dBZ)
+];
+
+// ============================================================
+// NWS QPE Precipitation colormap: standard NWS quantitative precip
+// Light green -> dark green -> yellow -> orange -> red -> purple
+// ============================================================
+pub static NWS_PRECIP: &[ColorStop] = &[
+    (0.000, 0xAD, 0xFF, 0xAD), // very light green (trace)
+    (0.083, 0x7E, 0xFF, 0x7E), // light green
+    (0.167, 0x2B, 0xCB, 0x2B), // green (0.25")
+    (0.250, 0x00, 0x8B, 0x00), // dark green (0.50")
+    (0.333, 0xFF, 0xFF, 0x00), // yellow (0.75")
+    (0.417, 0xFF, 0xD7, 0x00), // gold (1.0")
+    (0.500, 0xFF, 0x9C, 0x00), // orange (1.5")
+    (0.583, 0xFF, 0x57, 0x00), // dark orange (2.0")
+    (0.667, 0xFF, 0x00, 0x00), // red (2.5")
+    (0.750, 0xCC, 0x00, 0x00), // dark red (3.0")
+    (0.833, 0xAA, 0x00, 0x50), // crimson (4.0")
+    (0.917, 0x88, 0x00, 0x88), // purple (5.0")
+    (1.000, 0xFF, 0x80, 0xFF), // light magenta (6.0"+)
+];
+
+// ============================================================
+// GOES IR Enhancement colormap: satellite infrared
+// Warm=black/gray, cold=white with color-enhanced cloud tops
+// ============================================================
+pub static GOES_IR: &[ColorStop] = &[
+    (0.000, 0x00, 0x00, 0x00), // black (warm surface, ~300K)
+    (0.150, 0x3C, 0x3C, 0x3C), // dark gray
+    (0.300, 0x78, 0x78, 0x78), // medium gray
+    (0.400, 0xB0, 0xB0, 0xB0), // light gray
+    (0.450, 0xD0, 0xD0, 0xD0), // very light gray
+    (0.500, 0xFF, 0xFF, 0xFF), // white (cloud tops ~240K)
+    (0.550, 0x00, 0xCC, 0xFF), // cyan (enhanced cold tops)
+    (0.600, 0x00, 0x66, 0xFF), // blue
+    (0.650, 0xFF, 0xFF, 0x00), // yellow
+    (0.700, 0xFF, 0x99, 0x00), // orange
+    (0.750, 0xFF, 0x00, 0x00), // red
+    (0.800, 0xCC, 0x00, 0x66), // magenta
+    (0.850, 0x99, 0x00, 0xCC), // purple (very cold overshooting tops)
+    (0.900, 0x33, 0x00, 0x66), // dark purple
+    (1.000, 0x00, 0x00, 0x00), // black (coldest, ~170K)
+];
+
 /// Look up a named colormap. Returns None if the name is not recognized.
 pub fn get_colormap(name: &str) -> Option<&'static [ColorStop]> {
     match name {
         "temperature" | "temp" | "temperature_f" | "temperature_c"
             | "temperature_250" | "temperature_500" | "temperature_700"
-            | "dewpoint" | "dewpoint_f" => Some(TEMPERATURE),
+            => Some(TEMPERATURE),
+        "dewpoint" | "dewpoint_f" | "dewpoint_c" => Some(DEWPOINT),
         "precipitation" | "precip" | "precip_in" | "rain" => Some(PRECIPITATION),
         "wind" | "winds" | "winds_sfc" => Some(WIND),
         "reflectivity" | "refl" | "dbz" => Some(REFLECTIVITY),
-        "cape" | "three_cape" | "stp" | "ehi" | "srh" | "uh"
+        "cape" | "three_cape" | "stp" | "ehi" | "uh"
             | "lapse_rate" | "ml_metric" => Some(CAPE),
         "relative_humidity" | "rh" => Some(RELATIVE_HUMIDITY),
         "vorticity" | "relvort" | "geopot_anomaly" => Some(VORTICITY),
+        "pressure" | "mslp" | "altimeter" => Some(PRESSURE),
+        "snow" | "snow_accum" | "snowfall" => Some(SNOW),
+        "ice" | "ice_accum" | "freezing_rain" => Some(ICE),
+        "visibility" | "vis" => Some(VISIBILITY),
+        "cloud_cover" | "cloud" | "clouds" | "tcc" => Some(CLOUD_COVER),
+        "helicity" | "srh" => Some(HELICITY),
+        "divergence" | "div" | "convergence" => Some(DIVERGENCE),
+        "theta_e" | "thetae" | "equivalent_potential_temperature" => Some(THETA_E),
+        "nws_reflectivity" | "nws_radar" | "nexrad" => Some(NWS_REFLECTIVITY),
+        "nws_precip" | "nws_qpe" | "qpe" => Some(NWS_PRECIP),
+        "goes_ir" | "satellite_ir" | "ir" => Some(GOES_IR),
         _ => None,
     }
 }
@@ -233,12 +466,24 @@ pub fn get_colormap(name: &str) -> Option<&'static [ColorStop]> {
 pub fn list_colormaps() -> &'static [&'static str] {
     &[
         "temperature",
+        "dewpoint",
         "precipitation",
         "wind",
         "reflectivity",
         "cape",
         "relative_humidity",
         "vorticity",
+        "pressure",
+        "snow",
+        "ice",
+        "visibility",
+        "cloud_cover",
+        "helicity",
+        "divergence",
+        "theta_e",
+        "nws_reflectivity",
+        "nws_precip",
+        "goes_ir",
     ]
 }
 

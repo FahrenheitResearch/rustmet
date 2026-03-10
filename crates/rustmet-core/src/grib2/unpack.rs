@@ -72,12 +72,19 @@ impl<'a> BitReader<'a> {
 pub fn unpack_message(msg: &Grib2Message) -> crate::error::Result<Vec<f64>> {
     let dr = &msg.data_rep;
 
+    let num_points = msg.grid.nx as usize * msg.grid.ny as usize;
     let values = match dr.template {
         0 => unpack_simple(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
         2 => unpack_complex(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
         3 => unpack_complex_spatial(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        4 => unpack_ieee(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
         40 => unpack_jpeg2000(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
         41 => unpack_png(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        42 => unpack_ccsds(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        50 => unpack_spectral_simple(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        51 => unpack_spectral_complex(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        61 => unpack_simple_log(&msg.raw_data, dr).map_err(crate::RustmetError::Unpack)?,
+        200 => unpack_rle(&msg.raw_data, dr, num_points).map_err(crate::RustmetError::Unpack)?,
         _ => {
             return Err(crate::RustmetError::UnsupportedTemplate {
                 template: dr.template,
@@ -571,4 +578,174 @@ fn unpack_png(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> 
     }
 
     Ok(apply_scaling(&raw, dr))
+}
+
+/// Template 5.4 / 7.4: IEEE Floating Point packing.
+///
+/// Values are stored as IEEE 754 floats directly — no packing or scaling.
+/// Supports 32-bit (f32) and 64-bit (f64) precision based on `bits_per_value`.
+fn unpack_ieee(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> {
+    if data.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let bpv = dr.bits_per_value as usize;
+    match bpv {
+        32 => {
+            let n = data.len() / 4;
+            let mut values = Vec::with_capacity(n);
+            for chunk in data.chunks_exact(4) {
+                let v = f32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                values.push(v as f64);
+            }
+            Ok(values)
+        }
+        64 => {
+            let n = data.len() / 8;
+            let mut values = Vec::with_capacity(n);
+            for chunk in data.chunks_exact(8) {
+                let v = f64::from_be_bytes([
+                    chunk[0], chunk[1], chunk[2], chunk[3],
+                    chunk[4], chunk[5], chunk[6], chunk[7],
+                ]);
+                values.push(v);
+            }
+            Ok(values)
+        }
+        _ => Err(format!(
+            "IEEE float packing: unsupported bits_per_value={} (expected 32 or 64)",
+            bpv
+        )),
+    }
+}
+
+/// Template 5.42 / 7.42: CCSDS (AEC/SZIP) packing.
+///
+/// This template uses the CCSDS Adaptive Entropy Coding (AEC) algorithm.
+/// A full implementation requires the `libaec` library. For now, this returns
+/// a clear error message indicating the dependency is needed.
+fn unpack_ccsds(_data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> {
+    Err(format!(
+        "CCSDS/AEC decoding (template 5.42) is not yet supported. \
+         This data uses CCSDS flags=0x{:04X}, block_size={}, rsi={}. \
+         A libaec/AEC decoder integration is required.",
+        dr.ccsds_flags, dr.ccsds_block_size, dr.ccsds_rsi
+    ))
+}
+
+/// Template 5.61 / 7.61: Simple packing with logarithm pre-processing.
+///
+/// Values were stored as log10(value + 1) before simple packing.
+/// We unpack using simple packing, then reverse the transform: value = 10^x - 1.
+fn unpack_simple_log(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> {
+    let packed = unpack_simple(data, dr)?;
+    Ok(packed.iter().map(|&v| 10f64.powf(v) - 1.0).collect())
+}
+
+/// Template 5.200 / 7.200: Run Length Encoding (NCEP local extension).
+///
+/// Used for categorical/discrete data (e.g., precipitation type, soil type).
+/// Data is encoded as run-length encoded values where each entry consists of
+/// a level value and a run length packed into `bits_per_value` bits.
+///
+/// The encoding uses a variable-length scheme where the most significant bit(s)
+/// determine the level value and the remaining bits encode the run count.
+fn unpack_rle(data: &[u8], dr: &DataRepresentation, num_points: usize) -> Result<Vec<f64>, String> {
+    if data.is_empty() {
+        return Ok(vec![0.0; num_points]);
+    }
+
+    let bpv = dr.bits_per_value as usize;
+    if bpv == 0 {
+        return Ok(vec![dr.reference_value as f64; num_points]);
+    }
+
+    let mut reader = BitReader::new(data);
+    let mut result = Vec::with_capacity(num_points);
+
+    // NCEP RLE encoding for template 5.200:
+    // Read alternating (value, count) pairs, each `bpv` bits wide.
+    // The value is the category/level, count is how many consecutive
+    // grid points have that value.
+    while result.len() < num_points && reader.remaining_bits() >= bpv * 2 {
+        let value = reader.read_bits(bpv);
+        let count = reader.read_bits(bpv) as usize;
+        let count = count.max(1); // ensure at least 1
+
+        let scaled_value = dr.reference_value as f64
+            + value as f64 * 2.0_f64.powi(dr.binary_scale as i32)
+                * 10.0_f64.powi(-(dr.decimal_scale as i32));
+
+        let remaining = num_points - result.len();
+        let actual_count = count.min(remaining);
+        for _ in 0..actual_count {
+            result.push(scaled_value);
+        }
+    }
+
+    // If we haven't filled all points, pad with reference value
+    while result.len() < num_points {
+        result.push(dr.reference_value as f64);
+    }
+
+    Ok(result)
+}
+
+/// Template 5.50 / 7.50: Spectral Data — Simple Packing.
+///
+/// Used by global spectral models. The data contains spectral coefficients
+/// packed using simple packing. The first value is the real part of the (0,0)
+/// coefficient stored as an IEEE f32, followed by simple-packed remaining coefficients.
+fn unpack_spectral_simple(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> {
+    if data.len() < 4 {
+        return Ok(Vec::new());
+    }
+
+    // The first 4 bytes are the real value of the (0,0) coefficient as IEEE f32
+    let coeff_00 = f32::from_be_bytes([data[0], data[1], data[2], data[3]]) as f64;
+
+    // Remaining data is simple-packed
+    let remaining = &data[4..];
+    let bpv = dr.bits_per_value as usize;
+    if bpv == 0 || remaining.is_empty() {
+        return Ok(vec![coeff_00]);
+    }
+
+    let total_bits = remaining.len() * 8;
+    let n = total_bits / bpv;
+    let mut reader = BitReader::new(remaining);
+    let mut raw = Vec::with_capacity(n);
+    for _ in 0..n {
+        raw.push(reader.read_bits(bpv) as i64);
+    }
+
+    let mut values = Vec::with_capacity(n + 1);
+    values.push(coeff_00);
+    values.extend(apply_scaling(&raw, dr));
+    Ok(values)
+}
+
+/// Template 5.51 / 7.51: Spectral Data — Complex Packing.
+///
+/// Similar to spectral simple but uses complex packing for the coefficients
+/// after the (0,0) term. This is rarely encountered in gridded output.
+fn unpack_spectral_complex(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f64>, String> {
+    if data.len() < 4 {
+        return Ok(Vec::new());
+    }
+
+    // The first 4 bytes are the real value of the (0,0) coefficient as IEEE f32
+    let coeff_00 = f32::from_be_bytes([data[0], data[1], data[2], data[3]]) as f64;
+
+    // Remaining data uses complex packing
+    let remaining = &data[4..];
+    if remaining.is_empty() {
+        return Ok(vec![coeff_00]);
+    }
+
+    let complex_values = unpack_complex(remaining, dr)?;
+    let mut values = Vec::with_capacity(complex_values.len() + 1);
+    values.push(coeff_00);
+    values.extend(complex_values);
+    Ok(values)
 }

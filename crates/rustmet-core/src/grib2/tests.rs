@@ -566,4 +566,351 @@ mod tests {
             nx, ny, values.len(), min_val, max_val
         );
     }
+
+    // ========================================================================
+    // Template 5.200: Run Length Encoding (RLE) tests
+    // ========================================================================
+
+    #[test]
+    fn unpack_rle_basic() {
+        // RLE with 8-bit values: (value=1, count=3), (value=2, count=2), (value=0, count=4)
+        // Should produce: [1, 1, 1, 2, 2, 0, 0, 0, 0]
+        let raw_data: Vec<u8> = vec![
+            1, 3,   // value=1, count=3
+            2, 2,   // value=2, count=2
+            0, 4,   // value=0, count=4
+        ];
+
+        let msg = Grib2Message {
+            discipline: 0,
+            reference_time: chrono::NaiveDate::from_ymd_opt(2024, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+            grid: GridDefinition {
+                template: 0,
+                nx: 3,
+                ny: 3,
+                lat1: 0.0,
+                lon1: 0.0,
+                lat2: 2.0,
+                lon2: 2.0,
+                dx: 1.0,
+                dy: 1.0,
+                scan_mode: 0,
+                ..GridDefinition::default()
+            },
+            product: ProductDefinition::default(),
+            data_rep: DataRepresentation {
+                template: 200,
+                reference_value: 0.0,
+                binary_scale: 0,
+                decimal_scale: 0,
+                bits_per_value: 8,
+                ..DataRepresentation::default()
+            },
+            bitmap: None,
+            raw_data,
+        };
+
+        let values = unpack_message(&msg).unwrap();
+        assert_eq!(values.len(), 9);
+        // First 3 values should be 1.0
+        assert!((values[0] - 1.0).abs() < 1e-10);
+        assert!((values[1] - 1.0).abs() < 1e-10);
+        assert!((values[2] - 1.0).abs() < 1e-10);
+        // Next 2 should be 2.0
+        assert!((values[3] - 2.0).abs() < 1e-10);
+        assert!((values[4] - 2.0).abs() < 1e-10);
+        // Last 4 should be 0.0
+        assert!((values[5] - 0.0).abs() < 1e-10);
+        assert!((values[6] - 0.0).abs() < 1e-10);
+        assert!((values[7] - 0.0).abs() < 1e-10);
+        assert!((values[8] - 0.0).abs() < 1e-10);
+    }
+
+    // ========================================================================
+    // Template 5.4: IEEE Floating Point tests
+    // ========================================================================
+
+    #[test]
+    fn unpack_ieee_f32() {
+        // Pack three f32 values as big-endian bytes
+        let v1: f32 = 273.15;
+        let v2: f32 = 300.0;
+        let v3: f32 = -10.5;
+        let v4: f32 = 0.0;
+
+        let mut raw_data = Vec::new();
+        raw_data.extend_from_slice(&v1.to_be_bytes());
+        raw_data.extend_from_slice(&v2.to_be_bytes());
+        raw_data.extend_from_slice(&v3.to_be_bytes());
+        raw_data.extend_from_slice(&v4.to_be_bytes());
+
+        let msg = Grib2Message {
+            discipline: 0,
+            reference_time: chrono::NaiveDate::from_ymd_opt(2024, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+            grid: GridDefinition {
+                template: 0,
+                nx: 2,
+                ny: 2,
+                lat1: 0.0,
+                lon1: 0.0,
+                lat2: 1.0,
+                lon2: 1.0,
+                dx: 1.0,
+                dy: 1.0,
+                scan_mode: 0,
+                ..GridDefinition::default()
+            },
+            product: ProductDefinition::default(),
+            data_rep: DataRepresentation {
+                template: 4,
+                bits_per_value: 32,
+                ..DataRepresentation::default()
+            },
+            bitmap: None,
+            raw_data,
+        };
+
+        let values = unpack_message(&msg).unwrap();
+        assert_eq!(values.len(), 4);
+        assert!((values[0] - 273.15).abs() < 0.01);
+        assert!((values[1] - 300.0).abs() < 0.01);
+        assert!((values[2] - (-10.5)).abs() < 0.01);
+        assert!((values[3] - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn unpack_ieee_f64() {
+        let v1: f64 = 273.15;
+        let v2: f64 = 1.0e-15;
+        let v3: f64 = -999.999;
+        let v4: f64 = std::f64::consts::PI;
+
+        let mut raw_data = Vec::new();
+        raw_data.extend_from_slice(&v1.to_be_bytes());
+        raw_data.extend_from_slice(&v2.to_be_bytes());
+        raw_data.extend_from_slice(&v3.to_be_bytes());
+        raw_data.extend_from_slice(&v4.to_be_bytes());
+
+        let msg = Grib2Message {
+            discipline: 0,
+            reference_time: chrono::NaiveDate::from_ymd_opt(2024, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+            grid: GridDefinition {
+                template: 0,
+                nx: 2,
+                ny: 2,
+                lat1: 0.0,
+                lon1: 0.0,
+                lat2: 1.0,
+                lon2: 1.0,
+                dx: 1.0,
+                dy: 1.0,
+                scan_mode: 0,
+                ..GridDefinition::default()
+            },
+            product: ProductDefinition::default(),
+            data_rep: DataRepresentation {
+                template: 4,
+                bits_per_value: 64,
+                ..DataRepresentation::default()
+            },
+            bitmap: None,
+            raw_data,
+        };
+
+        let values = unpack_message(&msg).unwrap();
+        assert_eq!(values.len(), 4);
+        assert!((values[0] - 273.15).abs() < 1e-12);
+        assert!((values[1] - 1.0e-15).abs() < 1e-25);
+        assert!((values[2] - (-999.999)).abs() < 1e-10);
+        assert!((values[3] - std::f64::consts::PI).abs() < 1e-15);
+    }
+
+    // ========================================================================
+    // Template 5.61: Simple packing with log pre-processing
+    // ========================================================================
+
+    #[test]
+    fn unpack_simple_log_round_trip() {
+        // The log pre-processing stores log10(value + 1).
+        // We create values where the simple-packed result represents log10(value + 1).
+        // With R=0, E=0, D=0, X maps to X directly.
+        // So the simple unpacked value is X, then the log transform gives 10^X - 1.
+        //
+        // Let's pack X=0,1,2 as 8-bit values:
+        //   X=0 -> 10^0 - 1 = 0.0
+        //   X=1 -> 10^1 - 1 = 9.0
+        //   X=2 -> 10^2 - 1 = 99.0
+        //   X=3 -> 10^3 - 1 = 999.0
+
+        let raw_data: Vec<u8> = vec![0, 1, 2, 3];
+
+        let msg = Grib2Message {
+            discipline: 0,
+            reference_time: chrono::NaiveDate::from_ymd_opt(2024, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+            grid: GridDefinition {
+                template: 0,
+                nx: 2,
+                ny: 2,
+                lat1: 0.0,
+                lon1: 0.0,
+                lat2: 1.0,
+                lon2: 1.0,
+                dx: 1.0,
+                dy: 1.0,
+                scan_mode: 0,
+                ..GridDefinition::default()
+            },
+            product: ProductDefinition::default(),
+            data_rep: DataRepresentation {
+                template: 61,
+                reference_value: 0.0,
+                binary_scale: 0,
+                decimal_scale: 0,
+                bits_per_value: 8,
+                ..DataRepresentation::default()
+            },
+            bitmap: None,
+            raw_data,
+        };
+
+        let values = unpack_message(&msg).unwrap();
+        assert_eq!(values.len(), 4);
+        assert!((values[0] - 0.0).abs() < 1e-10, "expected 0.0, got {}", values[0]);
+        assert!((values[1] - 9.0).abs() < 1e-10, "expected 9.0, got {}", values[1]);
+        assert!((values[2] - 99.0).abs() < 1e-8, "expected 99.0, got {}", values[2]);
+        assert!((values[3] - 999.0).abs() < 1e-6, "expected 999.0, got {}", values[3]);
+    }
+
+    // ========================================================================
+    // Template 3.1: Rotated grid coordinate transform tests
+    // ========================================================================
+
+    #[test]
+    fn rotated_grid_identity_transform() {
+        use crate::grib2::grid::rotated_to_geographic;
+
+        // With south pole at (-90, 0) and no rotation, the rotated grid
+        // is identical to the regular grid (no transformation).
+        let (lat, lon) = rotated_to_geographic(45.0, 10.0, -90.0, 0.0, 0.0);
+        assert!(
+            (lat - 45.0).abs() < 0.01,
+            "Expected lat ~45.0, got {}",
+            lat
+        );
+        assert!(
+            (lon - 10.0).abs() < 0.01,
+            "Expected lon ~10.0, got {}",
+            lon
+        );
+    }
+
+    #[test]
+    fn rotated_grid_dwd_like() {
+        use crate::grib2::grid::rotated_to_geographic;
+
+        // DWD ICON uses south_pole_lat = -40.0, south_pole_lon = -170.0
+        // The rotated equator (rot_lat=0, rot_lon=0) maps to the point
+        // on the great circle 90 degrees from the rotated south pole.
+        // With alpha = 40 deg (north pole lat), the rotated equator at rlon=0
+        // maps to lat = 90 - alpha = 50 deg, lon = sp_lon = -170 deg.
+        let (lat, lon) = rotated_to_geographic(0.0, 0.0, -40.0, -170.0, 0.0);
+        assert!(
+            (lat - 50.0).abs() < 1.0,
+            "Expected lat ~50.0, got {}",
+            lat
+        );
+        assert!(
+            (lon - (-170.0)).abs() < 1.0,
+            "Expected lon ~-170.0, got {}",
+            lon
+        );
+    }
+
+    #[test]
+    fn rotated_grid_latlon_generation() {
+        // Test that grid_latlon works for a small rotated grid
+        let grid = GridDefinition {
+            template: 1,
+            nx: 3,
+            ny: 3,
+            lat1: -1.0,
+            lon1: -1.0,
+            lat2: 1.0,
+            lon2: 1.0,
+            dx: 1.0,
+            dy: 1.0,
+            scan_mode: 0,
+            south_pole_lat: -90.0,   // identity rotation
+            south_pole_lon: 0.0,
+            rotation_angle: 0.0,
+            ..GridDefinition::default()
+        };
+
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 9);
+        assert_eq!(lons.len(), 9);
+        // With identity rotation, center point should be near (0, 0)
+        // (after normalization, lon may be 180 due to +PI offset)
+        // All lats should be in [-90, 90]
+        for &lat in &lats {
+            assert!(
+                lat >= -90.0 && lat <= 90.0,
+                "Lat {} out of range",
+                lat
+            );
+        }
+    }
+
+    // ========================================================================
+    // Template 5.42: CCSDS stub test
+    // ========================================================================
+
+    #[test]
+    fn unpack_ccsds_returns_clear_error() {
+        let msg = Grib2Message {
+            discipline: 0,
+            reference_time: chrono::NaiveDate::from_ymd_opt(2024, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+            grid: GridDefinition {
+                template: 0,
+                nx: 2,
+                ny: 2,
+                ..GridDefinition::default()
+            },
+            product: ProductDefinition::default(),
+            data_rep: DataRepresentation {
+                template: 42,
+                bits_per_value: 16,
+                ccsds_flags: 0x00A0,
+                ccsds_block_size: 16,
+                ccsds_rsi: 128,
+                ..DataRepresentation::default()
+            },
+            bitmap: None,
+            raw_data: vec![0u8; 100],
+        };
+
+        let result = unpack_message(&msg);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("CCSDS") || err.contains("AEC"),
+            "Error should mention CCSDS/AEC, got: {}",
+            err
+        );
+    }
 }

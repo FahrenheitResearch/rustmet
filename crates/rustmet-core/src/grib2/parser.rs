@@ -41,6 +41,22 @@ pub struct GridDefinition {
     pub projection_center_flag: u8,
     /// Number of parallels between a pole and the equator (Gaussian grids).
     pub n_parallel: u32,
+    /// Rotated grid: latitude of the southern pole of rotation (degrees).
+    pub south_pole_lat: f64,
+    /// Rotated grid: longitude of the southern pole of rotation (degrees).
+    pub south_pole_lon: f64,
+    /// Rotated grid: angle of rotation (degrees).
+    pub rotation_angle: f64,
+    /// Space view: sub-satellite point latitude (degrees).
+    pub satellite_lat: f64,
+    /// Space view: sub-satellite point longitude (degrees).
+    pub satellite_lon: f64,
+    /// Space view: apparent diameter of Earth in grid lengths, x-direction.
+    pub xp: f64,
+    /// Space view: apparent diameter of Earth in grid lengths, y-direction.
+    pub yp: f64,
+    /// Space view: altitude of the camera above the Earth's surface (m).
+    pub altitude: f64,
 }
 
 /// Product definition from Section 4.
@@ -74,6 +90,12 @@ pub struct DataRepresentation {
     pub group_length_bits: u8,
     pub spatial_diff_order: u8,
     pub spatial_diff_bytes: u8,
+    /// CCSDS (Template 5.42): compression flags.
+    pub ccsds_flags: u16,
+    /// CCSDS (Template 5.42): block size.
+    pub ccsds_block_size: u16,
+    /// CCSDS (Template 5.42): reference sample interval.
+    pub ccsds_rsi: u16,
 }
 
 impl Default for GridDefinition {
@@ -95,6 +117,14 @@ impl Default for GridDefinition {
             lad: 0.0,
             projection_center_flag: 0,
             n_parallel: 0,
+            south_pole_lat: 0.0,
+            south_pole_lon: 0.0,
+            rotation_angle: 0.0,
+            satellite_lat: 0.0,
+            satellite_lon: 0.0,
+            xp: 0.0,
+            yp: 0.0,
+            altitude: 0.0,
         }
     }
 }
@@ -132,6 +162,9 @@ impl Default for DataRepresentation {
             group_length_bits: 0,
             spatial_diff_order: 0,
             spatial_diff_bytes: 0,
+            ccsds_flags: 0,
+            ccsds_block_size: 0,
+            ccsds_rsi: 0,
         }
     }
 }
@@ -416,10 +449,12 @@ fn parse_section3(sec: &[u8]) -> Result<GridDefinition, String> {
 
     match template {
         0 => parse_grid_template_0(sec, &mut grid)?,
+        1 => parse_grid_template_1(sec, &mut grid)?,
         10 => parse_grid_template_10(sec, &mut grid)?,
         20 => parse_grid_template_20(sec, &mut grid)?,
         30 => parse_grid_template_30(sec, &mut grid)?,
         40 => parse_grid_template_40(sec, &mut grid)?,
+        90 => parse_grid_template_90(sec, &mut grid)?,
         _ => {
             // For unknown templates, try to extract basic dimensions if possible
             if sec.len() >= 38 {
@@ -579,6 +614,64 @@ fn parse_grid_template_40(sec: &[u8], grid: &mut GridDefinition) -> Result<(), S
     Ok(())
 }
 
+/// Template 3.1: Rotated Latitude/Longitude.
+/// Same basic layout as template 3.0 but with additional rotation parameters
+/// at the end of the section.
+fn parse_grid_template_1(sec: &[u8], grid: &mut GridDefinition) -> Result<(), String> {
+    // First parse the regular lat/lon fields (same as template 0)
+    parse_grid_template_0(sec, grid)?;
+
+    // Rotated grid parameters start after the regular lat/lon fields.
+    // Template 3.1 has the rotation parameters at octets 73-84 (0-based: 72-83).
+    if sec.len() < 84 {
+        return Err("Section 3 template 1 (Rotated Lat/Lon) too short".into());
+    }
+
+    grid.south_pole_lat = read_signed_u32(sec, 72)? as f64 / 1_000_000.0;
+    grid.south_pole_lon = read_signed_u32(sec, 76)? as f64 / 1_000_000.0;
+    grid.rotation_angle = read_f32(sec, 80)? as f64;
+
+    Ok(())
+}
+
+/// Template 3.90: Space View Perspective or Orthographic.
+/// Used for satellite imagery (e.g., GOES, Meteosat).
+fn parse_grid_template_90(sec: &[u8], grid: &mut GridDefinition) -> Result<(), String> {
+    if sec.len() < 72 {
+        return Err("Section 3 template 90 (Space View) too short".into());
+    }
+
+    grid.nx = read_u32(sec, 30)?;
+    grid.ny = read_u32(sec, 34)?;
+
+    // Lap - latitude of sub-satellite point
+    grid.satellite_lat = read_signed_u32(sec, 38)? as f64 / 1_000_000.0;
+    // Lop - longitude of sub-satellite point
+    grid.satellite_lon = read_signed_u32(sec, 42)? as f64 / 1_000_000.0;
+
+    // Resolution and component flags at octet 47
+    // Dx, Dy - apparent diameters in grid lengths
+    grid.dx = read_u32(sec, 47)? as f64;
+    grid.dy = read_u32(sec, 51)? as f64;
+
+    // Xp, Yp - grid coordinates of sub-satellite point (scaled by 1000)
+    grid.xp = read_u32(sec, 55)? as f64 / 1000.0;
+    grid.yp = read_u32(sec, 59)? as f64 / 1000.0;
+
+    grid.scan_mode = read_u8(sec, 63)?;
+
+    // Altitude of the camera from the Earth's centre (in units of Earth's radius)
+    // Nr - altitude scaled by 10^6
+    if sec.len() >= 68 {
+        let nr = read_u32(sec, 64)? as f64 / 1_000_000.0;
+        // Convert from Earth-radii (from centre) to metres above surface
+        let r_earth = 6_371_229.0;
+        grid.altitude = (nr - 1.0) * r_earth;
+    }
+
+    Ok(())
+}
+
 /// Parse Section 4 (Product Definition).
 fn parse_section4(sec: &[u8]) -> Result<ProductDefinition, String> {
     if sec.len() < 11 {
@@ -624,8 +717,13 @@ fn parse_section5(sec: &[u8]) -> Result<DataRepresentation, String> {
         0 => parse_drtemplate_simple(sec, &mut dr)?,
         2 => parse_drtemplate_complex(sec, &mut dr)?,
         3 => parse_drtemplate_complex_spatial(sec, &mut dr)?,
+        4 => parse_drtemplate_simple(sec, &mut dr)?,   // IEEE float (uses bits_per_value)
         40 => parse_drtemplate_simple(sec, &mut dr)?,
         41 => parse_drtemplate_simple(sec, &mut dr)?,
+        42 => parse_drtemplate_ccsds(sec, &mut dr)?,
+        50 | 51 => parse_drtemplate_simple(sec, &mut dr)?,  // Spectral
+        61 => parse_drtemplate_simple(sec, &mut dr)?,  // Simple with log pre-processing
+        200 => parse_drtemplate_simple(sec, &mut dr)?, // RLE (NCEP local)
         _ => {
             if sec.len() >= 20 {
                 parse_drtemplate_simple(sec, &mut dr)?;
@@ -673,6 +771,24 @@ fn parse_drtemplate_complex_spatial(sec: &[u8], dr: &mut DataRepresentation) -> 
     }
     dr.spatial_diff_order = read_u8(sec, 47)?;
     dr.spatial_diff_bytes = read_u8(sec, 48)?;
+    Ok(())
+}
+
+/// Template 5.42: CCSDS (AEC/SZIP) packing.
+fn parse_drtemplate_ccsds(sec: &[u8], dr: &mut DataRepresentation) -> Result<(), String> {
+    parse_drtemplate_simple(sec, dr)?;
+    if sec.len() < 26 {
+        return Err("Section 5 CCSDS packing too short".into());
+    }
+    // Byte 20: type of original field values (not stored, skip)
+    // Bytes 21-22: CCSDS flags
+    dr.ccsds_flags = read_u16(sec, 21)?;
+    // Bytes 23-24: block size
+    dr.ccsds_block_size = read_u16(sec, 23)?;
+    // Bytes 25-26: reference sample interval
+    if sec.len() >= 27 {
+        dr.ccsds_rsi = read_u16(sec, 25)?;
+    }
     Ok(())
 }
 
