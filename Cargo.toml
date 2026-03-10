@@ -1,0 +1,43 @@
+[workspace]
+members = ["crates/rustmet-core", "crates/rustmet-py"]
+resolver = "2"
+
+[package]
+name = "rustmet"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Rust operational weather model processor and plotter — HRRR, GFS, NAM, RAP"
+license = "MIT"
+
+[dependencies]
+# Core library (GRIB2 parser, downloader, models)
+rustmet-core = { path = "crates/rustmet-core" }
+
+# Re-export core deps needed in main.rs
+chrono = { version = "0.4", features = ["serde"] }
+rayon = "1"
+
+# Image
+png = "0.17"
+
+# Font rendering
+fontdue = "0.9"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Geographic data
+rustmaps = { git = "https://github.com/FahrenheitResearch/rustmaps.git" }
+
+[[bin]]
+name = "rustmet"
+path = "src/main.rs"
+
+[[bin]]
+name = "rustmet-bench"
+path = "benchmark/bench.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

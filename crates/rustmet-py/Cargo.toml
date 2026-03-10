@@ -1,0 +1,16 @@
+[package]
+name = "rustmet-py"
+version = "0.1.0"
+edition = "2021"
+description = "Python bindings for rustmet — fast GRIB2 processing for HRRR, GFS, NAM, RAP"
+license = "MIT"
+
+[lib]
+name = "_rustmet"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"
+rustmet-core = { path = "../rustmet-core" }
+chrono = "0.4"

@@ -1,0 +1,28 @@
+[package]
+name = "rustmet-core"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Rust GRIB2 processor and weather model data library — HRRR, GFS, NAM, RAP"
+license = "MIT"
+
+[dependencies]
+# HTTP - blocking, pure Rust TLS
+ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots", "gzip"] }
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+rustls-rustcrypto = "0.0.2-alpha"
+webpki-roots = "0.26"
+
+# Compression (GRIB2 deflate)
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+# JPEG2000 for GRIB2 Template 5.40
+openjp2 = "0.6"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# PNG decoding for GRIB2 Template 5.41
+png = "0.17"
+
+# Parallelism
+rayon = "1"
