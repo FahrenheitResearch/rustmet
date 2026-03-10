@@ -1433,6 +1433,138 @@ fn convective_inhibition_depth(
     ))
 }
 
+// ──────────────────────────────────────────────────────────
+// New moist thermodynamics & sounding functions
+// ──────────────────────────────────────────────────────────
+
+/// Parcel temperature profile: dry adiabat to LCL, then moist adiabat above.
+/// p in hPa (surface first, decreasing), t_surface_c and td_surface_c in Celsius.
+/// Returns parcel temperature (Celsius) at each pressure level.
+#[pyfunction]
+fn parcel_profile<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    t_surface_c: f64,
+    td_surface_c: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::parcel_profile(p.as_slice()?, t_surface_c, td_surface_c);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Moist adiabatic lapse: temperature following a saturated adiabat (RK4).
+/// p in hPa (start first), t_start_c in Celsius.
+#[pyfunction]
+fn moist_lapse<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    t_start_c: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::moist_lapse(p.as_slice()?, t_start_c);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Dry adiabatic lapse: T = T_surface * (p/p_surface)^(Rd/Cp).
+/// p in hPa (surface first), t_surface_c in Celsius.
+#[pyfunction]
+fn dry_lapse<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    t_surface_c: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::dry_lapse(p.as_slice()?, t_surface_c);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Heat index (Rothfusz regression). t_f in Fahrenheit, rh in %.
+/// Returns heat index in Fahrenheit.
+#[pyfunction]
+fn py_heat_index(t_f: f64, rh: f64) -> f64 {
+    metfuncs::heat_index(t_f, rh)
+}
+
+/// NWS wind chill. t_f in Fahrenheit, wind_mph in mph.
+/// Returns wind chill in Fahrenheit.
+#[pyfunction]
+fn py_windchill(t_f: f64, wind_mph: f64) -> f64 {
+    metfuncs::windchill(t_f, wind_mph)
+}
+
+/// Australian apparent temperature (Celsius).
+/// t_c in C, rh in %, wind_ms in m/s, solar_wm2 optional (W/m^2).
+#[pyfunction]
+#[pyo3(signature = (t_c, rh, wind_ms, solar_wm2=None))]
+fn py_apparent_temperature(t_c: f64, rh: f64, wind_ms: f64, solar_wm2: Option<f64>) -> f64 {
+    metfuncs::apparent_temperature(t_c, rh, wind_ms, solar_wm2)
+}
+
+/// Downdraft CAPE. p in hPa, t and td in Celsius. Profiles surface-first.
+#[pyfunction]
+fn py_downdraft_cape(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<f64> {
+    Ok(metfuncs::downdraft_cape(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Mixed-layer CAPE and CIN. Returns (cape, cin).
+/// p in hPa, t and td in Celsius, depth_hpa typically 100.
+#[pyfunction]
+fn py_mixed_layer_cape_cin(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+    depth_hpa: f64,
+) -> PyResult<(f64, f64)> {
+    Ok(metfuncs::mixed_layer_cape_cin(p.as_slice()?, t.as_slice()?, td.as_slice()?, depth_hpa))
+}
+
+/// Most unstable CAPE and CIN. Returns (cape, cin).
+/// p in hPa, t and td in Celsius.
+#[pyfunction]
+fn py_most_unstable_cape_cin(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<(f64, f64)> {
+    Ok(metfuncs::most_unstable_cape_cin(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Surface-based CAPE and CIN. Returns (cape, cin).
+/// p in hPa, t and td in Celsius.
+#[pyfunction]
+fn py_surface_based_cape_cin(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<(f64, f64)> {
+    Ok(metfuncs::surface_based_cape_cin(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Bunkers storm motion. Returns ((u_rm, v_rm), (u_lm, v_lm)).
+/// p in hPa, u,v in m/s, z in meters AGL.
+#[pyfunction]
+fn py_bunkers_storm_motion(
+    p: PyReadonlyArray1<f64>,
+    u: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray1<f64>,
+    z: PyReadonlyArray1<f64>,
+) -> PyResult<((f64, f64), (f64, f64))> {
+    Ok(metfuncs::bunkers_storm_motion(
+        p.as_slice()?, u.as_slice()?, v.as_slice()?, z.as_slice()?
+    ))
+}
+
+/// Find intersections of two curves sharing the same x-axis.
+/// Returns list of (x, y) crossing points.
+#[pyfunction]
+fn py_find_intersections(
+    x: PyReadonlyArray1<f64>,
+    y1: PyReadonlyArray1<f64>,
+    y2: PyReadonlyArray1<f64>,
+) -> PyResult<Vec<(f64, f64)>> {
+    Ok(metfuncs::find_intersections(x.as_slice()?, y1.as_slice()?, y2.as_slice()?))
+}
 
 // ──────────────────────────────────────────────────────────
 // Rendering functions
@@ -2641,6 +2773,19 @@ fn _rustmet(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(warm_nose_check, m)?)?;
     m.add_function(wrap_pyfunction!(freezing_rain_composite, m)?)?;
     m.add_function(wrap_pyfunction!(convective_inhibition_depth, m)?)?;
+    // New moist thermodynamics & sounding functions
+    m.add_function(wrap_pyfunction!(parcel_profile, m)?)?;
+    m.add_function(wrap_pyfunction!(moist_lapse, m)?)?;
+    m.add_function(wrap_pyfunction!(dry_lapse, m)?)?;
+    m.add_function(wrap_pyfunction!(py_heat_index, m)?)?;
+    m.add_function(wrap_pyfunction!(py_windchill, m)?)?;
+    m.add_function(wrap_pyfunction!(py_apparent_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(py_downdraft_cape, m)?)?;
+    m.add_function(wrap_pyfunction!(py_mixed_layer_cape_cin, m)?)?;
+    m.add_function(wrap_pyfunction!(py_most_unstable_cape_cin, m)?)?;
+    m.add_function(wrap_pyfunction!(py_surface_based_cape_cin, m)?)?;
+    m.add_function(wrap_pyfunction!(py_bunkers_storm_motion, m)?)?;
+    m.add_function(wrap_pyfunction!(py_find_intersections, m)?)?;
     // Rendering functions
     m.add_function(wrap_pyfunction!(render_map, m)?)?;
     m.add_function(wrap_pyfunction!(render_array, m)?)?;

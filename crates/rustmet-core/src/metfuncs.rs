@@ -1086,20 +1086,7 @@ pub fn moist_lapse(p: &[f64], t_start_c: f64) -> Vec<f64> {
             result.push(t);
             continue;
         }
-        // RK4 integration
-        let n_steps = ((dp.abs() / 5.0) as usize).max(1);
-        let h = dp / n_steps as f64;
-        for _ in 0..n_steps {
-            let p_curr = p[i - 1] + (result.len() as f64 - 1.0) * 0.0; // approximate
-            let p_mid = p[i - 1] + (p[i] - p[i - 1]) * 0.5;
-            let _ = p_mid;
-            // Simple approach: subdivide the pressure interval
-            let k1 = h * moist_lapse_rate(p[i - 1] + (i as f64 - 1.0) * 0.0, t);
-            let _ = p_curr;
-            // More straightforward RK4 on [p[i-1], p[i]]
-            break; // will use loop below instead
-        }
-        // Redo with cleaner RK4
+        // RK4 integration with subdivided steps
         let n_steps = ((dp.abs() / 5.0) as usize).max(4);
         let h = dp / n_steps as f64;
         let mut p_c = p[i - 1];
@@ -1161,7 +1148,7 @@ pub fn parcel_profile(p: &[f64], t_surface_c: f64, td_surface_c: f64) -> Vec<f64
 
     // Build result
     let mut moist_idx = 1; // skip the LCL entry itself
-    for (i, &pi) in p.iter().enumerate() {
+    for (_i, &pi) in p.iter().enumerate() {
         if pi > p_lcl {
             // Dry adiabat
             let t_k = t_surface_k * (pi / p_surface).powf(ROCP);
@@ -2457,5 +2444,231 @@ mod tests {
         assert!(slp > 950.0, "slp={slp} should be > 950");
         // Should be roughly 1010 hPa
         assert!((slp - 1010.0).abs() < 15.0, "slp={slp}");
+    }
+
+    // =========================================================================
+    // New Function Tests
+    // =========================================================================
+
+    #[test]
+    fn test_dry_lapse() {
+        let p = vec![1000.0, 850.0, 700.0, 500.0];
+        let result = dry_lapse(&p, 20.0);
+        assert_eq!(result.len(), 4);
+        assert!((result[0] - 20.0).abs() < 0.01, "surface should be 20C, got {}", result[0]);
+        // Temperature decreases with height (lower pressure)
+        assert!(result[1] < result[0], "850 should be cooler than surface");
+        assert!(result[2] < result[1], "700 should be cooler than 850");
+    }
+
+    #[test]
+    fn test_moist_lapse() {
+        let p = vec![1000.0, 900.0, 800.0, 700.0, 600.0, 500.0];
+        let result = moist_lapse(&p, 20.0);
+        assert_eq!(result.len(), 6);
+        assert!((result[0] - 20.0).abs() < 0.01);
+        // Moist adiabat cools slower than dry at warm temps
+        let dry = dry_lapse(&p, 20.0);
+        // At 500 hPa, moist should be warmer than dry
+        assert!(result[5] > dry[5],
+            "moist {} should be warmer than dry {} at 500 hPa", result[5], dry[5]);
+    }
+
+    #[test]
+    fn test_parcel_profile() {
+        let p = vec![1000.0, 925.0, 850.0, 700.0, 500.0, 300.0];
+        let result = parcel_profile(&p, 25.0, 18.0);
+        assert_eq!(result.len(), 6);
+        assert!((result[0] - 25.0).abs() < 0.5, "surface should be ~25C, got {}", result[0]);
+        // Should decrease monotonically
+        for i in 1..result.len() {
+            assert!(result[i] < result[i - 1],
+                "should decrease: {} vs {} at level {}", result[i], result[i-1], i);
+        }
+    }
+
+    #[test]
+    fn test_heat_index_low_temp() {
+        // Below 80F, simple formula
+        let hi = heat_index(75.0, 50.0);
+        assert!(hi < 80.0, "heat index at 75F should be < 80, got {hi}");
+        assert!(hi > 65.0, "heat index at 75F should be > 65, got {hi}");
+    }
+
+    #[test]
+    fn test_heat_index_high_temp() {
+        // 100F at 50% RH: heat index should be ~120F
+        let hi = heat_index(100.0, 50.0);
+        assert!(hi > 110.0 && hi < 140.0, "heat index at 100F/50%RH = {hi}");
+    }
+
+    #[test]
+    fn test_windchill() {
+        // 0F at 15 mph: windchill should be well below 0
+        let wc = windchill(0.0, 15.0);
+        assert!(wc < 0.0, "windchill at 0F/15mph = {wc}");
+        assert!(wc > -30.0, "windchill at 0F/15mph = {wc}");
+    }
+
+    #[test]
+    fn test_windchill_warm() {
+        // Above 50F: should return temperature unchanged
+        let wc = windchill(60.0, 20.0);
+        assert!((wc - 60.0).abs() < 0.01, "windchill above 50F should be unchanged, got {wc}");
+    }
+
+    #[test]
+    fn test_downdraft_cape() {
+        let p = vec![1000.0, 925.0, 850.0, 700.0, 500.0, 400.0, 300.0];
+        let t = vec![30.0, 22.0, 16.0, 4.0, -15.0, -28.0, -44.0];
+        let td = vec![22.0, 18.0, 12.0, -2.0, -25.0, -38.0, -54.0];
+        let dcape = downdraft_cape(&p, &t, &td);
+        // DCAPE should be non-negative
+        assert!(dcape >= 0.0, "DCAPE should be >= 0, got {dcape}");
+        // For an unstable profile, should have some DCAPE
+        // (value depends on exact profile, just check it's reasonable)
+    }
+
+    #[test]
+    fn test_bunkers_storm_motion() {
+        let p = vec![1000.0, 925.0, 850.0, 700.0, 500.0, 300.0];
+        let z = vec![0.0, 750.0, 1500.0, 3000.0, 5500.0, 9000.0];
+        let u = vec![5.0, 8.0, 12.0, 18.0, 25.0, 30.0];
+        let v = vec![0.0, 2.0, 5.0, 8.0, 10.0, 8.0];
+        let ((u_rm, v_rm), (u_lm, v_lm)) = bunkers_storm_motion(&p, &u, &v, &z);
+        // Right mover and left mover should be different
+        let rm_spd = (u_rm * u_rm + v_rm * v_rm).sqrt();
+        let lm_spd = (u_lm * u_lm + v_lm * v_lm).sqrt();
+        assert!(rm_spd > 0.0, "right mover speed should be > 0");
+        assert!(lm_spd > 0.0, "left mover speed should be > 0");
+        // They should deviate from mean wind in opposite directions
+        assert!((u_rm - u_lm).abs() > 1.0 || (v_rm - v_lm).abs() > 1.0,
+            "RM and LM should differ");
+    }
+
+    #[test]
+    fn test_brunt_vaisala_frequency() {
+        let p = vec![1000.0, 850.0, 700.0, 500.0, 300.0];
+        let t_k = vec![293.0, 283.0, 270.0, 252.0, 228.0];
+        let bv = brunt_vaisala_frequency(&p, &t_k);
+        assert_eq!(bv.len(), 5);
+        // N should be positive for stable atmosphere
+        for &n in &bv {
+            assert!(n >= 0.0, "BV frequency should be non-negative, got {n}");
+        }
+        // Typical tropospheric N is ~0.01 s^-1
+        assert!(bv[2] > 0.005 && bv[2] < 0.03,
+            "BV frequency should be ~0.01, got {}", bv[2]);
+    }
+
+    #[test]
+    fn test_find_intersections() {
+        let x = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let y1 = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        let y2 = vec![4.0, 3.0, 2.0, 1.0, 0.0]; // crosses y1 at x=2
+        let crossings = find_intersections(&x, &y1, &y2);
+        assert_eq!(crossings.len(), 1, "should find 1 crossing, found {}", crossings.len());
+        assert!((crossings[0].0 - 2.0).abs() < 0.01,
+            "crossing x should be ~2.0, got {}", crossings[0].0);
+        assert!((crossings[0].1 - 2.0).abs() < 0.01,
+            "crossing y should be ~2.0, got {}", crossings[0].1);
+    }
+
+    #[test]
+    fn test_dewpoint_from_vapor_pressure() {
+        // At 20C, es ~ 23.4 hPa; dewpoint(23.4) should be ~20C
+        let es = saturation_vapor_pressure(20.0);
+        let td = dewpoint(es);
+        assert!((td - 20.0).abs() < 0.1, "dewpoint from es at 20C = {td}");
+    }
+
+    #[test]
+    fn test_exner_function() {
+        let pi = exner_function(1000.0);
+        assert!((pi - 1.0).abs() < 0.001, "Exner at 1000 hPa should be ~1.0, got {pi}");
+        let pi500 = exner_function(500.0);
+        assert!(pi500 < 1.0 && pi500 > 0.5, "Exner at 500 hPa = {pi500}");
+    }
+
+    #[test]
+    fn test_temperature_from_potential_temperature() {
+        let theta = potential_temperature(850.0, 10.0);
+        let t_k = temperature_from_potential_temperature(850.0, theta);
+        assert!((t_k - (10.0 + ZEROCNK)).abs() < 0.01,
+            "roundtrip T from theta should be ~283.15K, got {t_k}");
+    }
+
+    #[test]
+    fn test_geopotential_roundtrip() {
+        let z = 5500.0;
+        let geopot = height_to_geopotential(z);
+        let z_back = geopotential_to_height(geopot);
+        assert!((z_back - z).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_scale_height() {
+        // At 250K, H should be ~7.3 km
+        let h = scale_height(250.0);
+        assert!((h - 7300.0).abs() < 500.0, "scale height at 250K = {h}");
+    }
+
+    #[test]
+    fn test_vertical_velocity_roundtrip() {
+        let w = 1.0; // 1 m/s upward
+        let omega = vertical_velocity_pressure(w, 500.0, -20.0);
+        assert!(omega < 0.0, "upward motion should give negative omega, got {omega}");
+        let w_back = vertical_velocity(omega, 500.0, -20.0);
+        assert!((w_back - w).abs() < 1e-10, "roundtrip w = {w_back}");
+    }
+
+    #[test]
+    fn test_sigma_to_pressure() {
+        let p = sigma_to_pressure(0.5, 1000.0, 100.0);
+        assert!((p - 550.0).abs() < 0.01, "sigma=0.5 should give 550 hPa, got {p}");
+        let p_sfc = sigma_to_pressure(1.0, 1000.0, 100.0);
+        assert!((p_sfc - 1000.0).abs() < 0.01);
+        let p_top = sigma_to_pressure(0.0, 1000.0, 100.0);
+        assert!((p_top - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_apparent_temperature() {
+        let at = apparent_temperature(35.0, 60.0, 2.0, None);
+        // Should be above actual temp due to humidity
+        assert!(at > 30.0 && at < 50.0, "apparent temp at 35C/60%/2m/s = {at}");
+    }
+
+    #[test]
+    fn test_mixed_layer() {
+        let p = vec![1000.0, 975.0, 950.0, 925.0, 900.0, 850.0, 700.0];
+        let vals = vec![20.0, 19.0, 18.0, 17.0, 16.0, 14.0, 4.0];
+        let ml = mixed_layer(&p, &vals, 100.0);
+        // Should be roughly the average of 20..16 range
+        assert!(ml > 15.0 && ml < 20.0, "mixed layer average = {ml}");
+    }
+
+    #[test]
+    fn test_gradient_richardson_number() {
+        let theta = vec![300.0, 301.0, 303.0, 306.0];
+        let u = vec![5.0, 10.0, 15.0, 20.0];
+        let v = vec![0.0, 0.0, 0.0, 0.0];
+        let z = vec![0.0, 500.0, 1000.0, 1500.0];
+        let ri = gradient_richardson_number(&theta, &u, &v, &z);
+        assert_eq!(ri.len(), 4);
+        // Positive Ri = stable, should be a small positive number for this profile
+        assert!(ri[1] > 0.0, "Ri should be positive for stable profile, got {}", ri[1]);
+    }
+
+    #[test]
+    fn test_tke() {
+        let u = vec![1.0, -1.0, 2.0, -2.0];
+        let v = vec![0.5, -0.5, 1.0, -1.0];
+        let w = vec![0.1, -0.1, 0.2, -0.2];
+        let tke_val = tke(&u, &v, &w);
+        assert!(tke_val > 0.0, "TKE should be positive");
+        // Expected: 0.5 * mean(1+0.25+0.01 + 1+0.25+0.01 + 4+1+0.04 + 4+1+0.04) / 4
+        //         = 0.5 * (1.26 + 1.26 + 5.04 + 5.04) / 4 = 0.5 * 3.15 = 1.575
+        assert!((tke_val - 1.575).abs() < 0.01, "TKE = {tke_val}");
     }
 }
