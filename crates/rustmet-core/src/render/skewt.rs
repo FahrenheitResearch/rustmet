@@ -345,6 +345,7 @@ fn saturation_vapor_pressure(t_c: f64) -> f64 {
 }
 
 /// Compute saturation mixing ratio (kg/kg) from T (°C) and P (hPa).
+#[allow(dead_code)]
 fn sat_mixing_ratio(t_c: f64, p_hpa: f64) -> f64 {
     let es = saturation_vapor_pressure(t_c);
     0.622 * es / (p_hpa - es).max(0.001)

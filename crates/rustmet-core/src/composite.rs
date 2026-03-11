@@ -40,7 +40,7 @@ fn interp_at_height(target_h: f64, heights: &[f64], values: &[f64]) -> f64 {
     values[values.len() - 1]
 }
 
-/// Extract a column (nz values) from a flattened 3D array [nz][ny][nx] at grid point (j, i).
+/// Extract a column (nz values) from a flattened 3D array `[nz][ny][nx]` at grid point (j, i).
 fn extract_column(data: &[f64], nz: usize, ny: usize, nx: usize, j: usize, i: usize) -> Vec<f64> {
     let mut col = Vec::with_capacity(nz);
     for k in 0..nz {
@@ -64,18 +64,18 @@ pub fn dewpoint_from_q(q: f64, p_hpa: f64) -> f64 {
 
 /// Compute CAPE/CIN for every grid point (parallelized with rayon).
 ///
-/// All 3D arrays are flattened [nz][ny][nx]. 2D arrays are [ny][nx].
+/// All 3D arrays are flattened `[nz][ny][nx]`. 2D arrays are `[ny][nx]`.
 ///
 /// `parcel_type`: `"sb"` (surface-based), `"ml"` (mixed-layer), `"mu"` (most-unstable).
 ///
 /// Inputs:
-/// - `pressure_3d`: Full pressure in Pa, shape [nz][ny][nx]
-/// - `temperature_c_3d`: Temperature in Celsius, shape [nz][ny][nx]
-/// - `qvapor_3d`: Water vapor mixing ratio in kg/kg, shape [nz][ny][nx]
-/// - `height_agl_3d`: Height AGL in meters, shape [nz][ny][nx]
-/// - `psfc`: Surface pressure in Pa, shape [ny][nx]
-/// - `t2`: 2-meter temperature in K, shape [ny][nx]
-/// - `q2`: 2-meter mixing ratio in kg/kg, shape [ny][nx]
+/// - `pressure_3d`: Full pressure in Pa, shape `[nz][ny][nx]`
+/// - `temperature_c_3d`: Temperature in Celsius, shape `[nz][ny][nx]`
+/// - `qvapor_3d`: Water vapor mixing ratio in kg/kg, shape `[nz][ny][nx]`
+/// - `height_agl_3d`: Height AGL in meters, shape `[nz][ny][nx]`
+/// - `psfc`: Surface pressure in Pa, shape `[ny][nx]`
+/// - `t2`: 2-meter temperature in K, shape `[ny][nx]`
+/// - `q2`: 2-meter mixing ratio in kg/kg, shape `[ny][nx]`
 ///
 /// Returns `(cape_2d, cin_2d, lcl_2d, lfc_2d)` each `Vec<f64>` of size `ny * nx`.
 pub fn compute_cape_cin(
@@ -168,8 +168,8 @@ pub fn compute_cape_cin(
 
 /// Compute 0-X km Storm Relative Helicity using Bunkers storm motion.
 ///
-/// `u_3d`, `v_3d`: Wind components in m/s, shape [nz][ny][nx]
-/// `height_agl_3d`: Height AGL in meters, shape [nz][ny][nx]
+/// `u_3d`, `v_3d`: Wind components in m/s, shape `[nz][ny][nx]`
+/// `height_agl_3d`: Height AGL in meters, shape `[nz][ny][nx]`
 /// `top_m`: height AGL in meters (typically 1000.0 or 3000.0)
 pub fn compute_srh(
     u_3d: &[f64],
@@ -324,8 +324,8 @@ fn compute_srh_column(
 
 /// Compute bulk wind shear magnitude (m/s) between `bottom_m` and `top_m` AGL.
 ///
-/// `u_3d`, `v_3d`: Wind components in m/s, shape [nz][ny][nx]
-/// `height_agl_3d`: Height AGL in meters, shape [nz][ny][nx]
+/// `u_3d`, `v_3d`: Wind components in m/s, shape `[nz][ny][nx]`
+/// `height_agl_3d`: Height AGL in meters, shape `[nz][ny][nx]`
 pub fn compute_shear(
     u_3d: &[f64],
     v_3d: &[f64],
@@ -456,9 +456,9 @@ pub fn compute_scp(
 
 /// Lapse rate (C/km) between two heights in km AGL.
 ///
-/// `temperature_c_3d`: Temperature in Celsius, shape [nz][ny][nx]
-/// `qvapor_3d`: Water vapor mixing ratio in kg/kg, shape [nz][ny][nx]
-/// `height_agl_3d`: Height AGL in meters, shape [nz][ny][nx]
+/// `temperature_c_3d`: Temperature in Celsius, shape `[nz][ny][nx]`
+/// `qvapor_3d`: Water vapor mixing ratio in kg/kg, shape `[nz][ny][nx]`
+/// `height_agl_3d`: Height AGL in meters, shape `[nz][ny][nx]`
 ///
 /// Uses virtual temperature for accuracy.
 /// Positive values indicate temperature decreasing with height (conditionally unstable).
@@ -530,8 +530,8 @@ pub fn compute_lapse_rate(
 ///
 /// PW = (1/g) * integral(QVAPOR * dp) from surface to top of model.
 ///
-/// `qvapor_3d`: Mixing ratio in kg/kg, shape [nz][ny][nx]
-/// `pressure_3d`: Full pressure in Pa, shape [nz][ny][nx]
+/// `qvapor_3d`: Mixing ratio in kg/kg, shape `[nz][ny][nx]`
+/// `pressure_3d`: Full pressure in Pa, shape `[nz][ny][nx]`
 pub fn compute_pw(
     qvapor_3d: &[f64],
     pressure_3d: &[f64],
@@ -578,7 +578,7 @@ pub fn compute_pw(
 
 /// Composite reflectivity (max in column) in dBZ from REFL_10CM field.
 ///
-/// `refl_3d`: Reflectivity in dBZ, shape [nz][ny][nx]
+/// `refl_3d`: Reflectivity in dBZ, shape `[nz][ny][nx]`
 pub fn composite_reflectivity_from_refl(
     refl_3d: &[f64],
     nx: usize,
@@ -607,7 +607,7 @@ pub fn composite_reflectivity_from_refl(
 /// Composite reflectivity (max in column) in dBZ from hydrometeor mixing ratios.
 /// Uses Smith (1984) empirical approximation.
 ///
-/// All 3D fields shape [nz][ny][nx]:
+/// All 3D fields shape `[nz][ny][nx]`:
 /// - `pressure_3d`: Pa
 /// - `temperature_c_3d`: Celsius
 /// - `qrain_3d`, `qsnow_3d`, `qgraup_3d`: kg/kg

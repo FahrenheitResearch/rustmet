@@ -1,7 +1,7 @@
 # rustmet
 
 [![CI](https://github.com/FahrenheitResearch/rustmet/actions/workflows/ci.yml/badge.svg)](https://github.com/FahrenheitResearch/rustmet/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Pure Rust GRIB2 processor -- 5x faster than cfgrib.**
 
@@ -89,6 +89,26 @@ rustmet is **5x faster end-to-end** than the standard Python stack. The download
 - **xarray support** -- `rustmet.to_xarray()` gives you a labeled Dataset with coordinates
 - **Parallel decoding** -- multi-message files are decoded across threads with rayon
 - **Cross-platform** -- Linux, macOS, Windows; x86_64 and aarch64
+
+## Test Suite
+
+rustmet ships with a comprehensive test suite of **510+ tests** covering every layer of the stack:
+
+```bash
+cargo test                    # Run all 510+ tests
+cargo test -p rustmet-core    # Core library tests only
+cargo bench                   # Criterion benchmarks
+```
+
+- **GRIB2 parser tests** -- section parsing, template decoding, bit-level unpacking, edge cases
+- **Meteorological calculations** -- CAPE, CIN, helicity, storm motion, lapse rates, thermodynamic profiles validated against known values
+- **Grid math** -- derivatives, divergence, vorticity, Laplacian on synthetic fields with analytic solutions
+- **Projection tests** -- Lambert Conformal, Lat/Lon, Mercator, Polar Stereographic round-trip accuracy
+- **Download/index tests** -- `.idx` parsing, byte-range computation, URL generation for all supported models
+- **Rendering tests** -- colormap interpolation, contour generation, wind barb geometry, PNG output validation
+- **Python bindings** -- PyO3 integration tests for fetch, decode, and xarray conversion
+
+Benchmarks use [Criterion.rs](https://github.com/bheisler/criterion.rs) and cover GRIB2 decoding throughput, JPEG2000 decompression, grid interpolation, and colormap lookup performance.
 
 ## Project Structure
 

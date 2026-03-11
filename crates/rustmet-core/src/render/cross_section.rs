@@ -63,6 +63,7 @@ fn pressure_to_y(p: f64, p_min: f64, p_max: f64, height: u32) -> f64 {
 
 /// Convert a horizontal distance to a pixel x-coordinate.
 #[inline]
+#[allow(dead_code)]
 fn distance_to_x(d: f64, d_min: f64, d_max: f64, width: u32) -> f64 {
     let frac = (d - d_min) / (d_max - d_min);
     frac * (width as f64 - 1.0)

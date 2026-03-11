@@ -1284,7 +1284,7 @@ pub fn static_stability(p: &[f64], t_k: &[f64]) -> Vec<f64> {
 }
 
 /// Pressure-weighted mean of a quantity over a set of pressure levels.
-/// mean = sum(values[i] * dp[i]) / sum(dp[i]) where dp is layer thickness.
+/// mean = sum(values\[i\] * dp\[i\]) / sum(dp\[i\]) where dp is layer thickness.
 pub fn mean_pressure_weighted(p: &[f64], values: &[f64]) -> f64 {
     if p.len() < 2 || values.len() < 2 {
         return if values.is_empty() { 0.0 } else { values[0] };
@@ -1552,7 +1552,7 @@ pub fn get_layer_heights(p: &[f64], z: &[f64], p_bottom: f64, p_top: f64) -> (Ve
     get_layer(p, z, p_bottom, p_top)
 }
 
-/// Thinning mask for station plots. Returns Vec<bool> where true = keep.
+/// Thinning mask for station plots. Returns `Vec<bool>` where true = keep.
 /// Removes points closer than radius_deg to already-kept points.
 pub fn reduce_point_density(lats: &[f64], lons: &[f64], radius_deg: f64) -> Vec<bool> {
     let n = lats.len().min(lons.len());
@@ -1750,7 +1750,7 @@ fn cape_cin_from_parcel(
 /// Returns ((u_rm, v_rm), (u_lm, v_lm)) for right-mover and left-mover.
 /// p: pressure (hPa), u,v: wind components (m/s), z: height AGL (m). Surface first.
 pub fn bunkers_storm_motion(
-    p: &[f64], u: &[f64], v: &[f64], z: &[f64],
+    _p: &[f64], u: &[f64], v: &[f64], z: &[f64],
 ) -> ((f64, f64), (f64, f64)) {
     // Mean wind in 0-6km layer
     let mut sum_u = 0.0;
@@ -1932,7 +1932,7 @@ pub fn potential_vorticity_baroclinic(
 }
 
 /// Interpolate 3D fields to isentropic (constant potential temperature) surfaces.
-/// theta_levels: target theta values (K). p_3d, t_3d: flattened [nz][ny][nx].
+/// theta_levels: target theta values (K). p_3d, t_3d: flattened `[nz][ny][nx]`.
 /// fields: additional fields to interpolate. Returns interpolated fields at each theta level.
 pub fn isentropic_interpolation(
     theta_levels: &[f64],

@@ -374,6 +374,7 @@ pub fn precip_color_in(t: f64) -> Color {
 // ============================================================
 // SHADED OVERLAY (transparent to semi-transparent black)
 // ============================================================
+#[allow(dead_code)]
 pub fn shaded_overlay_color(t: f64) -> Color {
     let alpha = (t.clamp(0.0, 1.0) * 96.0) as u8; // 0x00 to 0x60
     [0, 0, 0, alpha]

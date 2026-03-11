@@ -19,8 +19,8 @@ const INDICATOR_SIZE: usize = 16;
 
 /// Incremental GRIB2 parser that processes messages as they arrive.
 ///
-/// Feed bytes from a network stream (or any source) via [`feed`], and
-/// extract fully-parsed messages via [`take_messages`].
+/// Feed bytes from a network stream (or any source) via [`Self::feed`], and
+/// extract fully-parsed messages via [`Self::take_messages`].
 ///
 /// # Example
 ///

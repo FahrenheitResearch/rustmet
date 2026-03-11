@@ -3,7 +3,7 @@
 /// Re-exports `GribProduct` from rustmet-core, plus rendering-specific types.
 
 // Re-export core GRIB product types
-pub use rustmet_core::products::{GribProduct, GRIB_PRODUCTS, find_grib_product, list_grib_products};
+pub use rustmet_core::products::{GribProduct, find_grib_product, list_grib_products};
 
 // ============================================================
 // Full Plot Product Definitions (rendering types)
@@ -11,6 +11,7 @@ pub use rustmet_core::products::{GribProduct, GRIB_PRODUCTS, find_grib_product, 
 
 /// How to render the field data
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum RenderStyle {
     /// Filled contours (most common)
     FilledContour,
@@ -20,6 +21,7 @@ pub enum RenderStyle {
 
 /// Overlay type
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum Overlay {
     /// Wind barbs at a given level
     WindBarbs(FieldLevel),
@@ -34,12 +36,14 @@ pub enum Overlay {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum FieldLevel {
     Surface,
     PressureMb(f64),
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub enum UhDuration {
     OneHour,
     Run,
@@ -47,6 +51,7 @@ pub enum UhDuration {
 
 /// What data does this product need?
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum ProductData {
     // Surface fields
     SurfaceTemperature { unit: TempUnit },
@@ -81,19 +86,24 @@ pub enum ProductData {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum TempUnit { Celsius, Fahrenheit }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub enum ParcelType { SB, ML, MU }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum PrecipRange { Total, OneHour, SixHour }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum PrecipUnit { Inches }
 
 /// A complete plot product definition
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct Product {
     pub name: &'static str,
     pub product_name_fn: fn(f64) -> String, // takes pressure level, returns title string
@@ -113,6 +123,7 @@ pub struct Product {
 }
 
 /// Generate the default set of products for a severe weather plotting preset.
+#[allow(dead_code)]
 pub fn default_products() -> Vec<Product> {
     let mut products = Vec::new();
 

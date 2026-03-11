@@ -110,7 +110,7 @@ pub fn render_filled_contours_with_colormap(
                 + v11 * fx * fy;
 
             // Find which band this value falls in
-            let t = ((val - level_min) * inv_level_range).clamp(0.0, 1.0);
+            let _t = ((val - level_min) * inv_level_range).clamp(0.0, 1.0);
 
             // Quantize to band center for discrete contour look
             let band_idx = find_band(val, levels, num_bands);

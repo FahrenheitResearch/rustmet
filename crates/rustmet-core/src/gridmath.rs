@@ -4,7 +4,6 @@
 /// All grid arrays are flattened row-major: index = j * nx + i
 /// where j is the y-index (row) and i is the x-index (column).
 
-use std::f64::consts::PI;
 
 /// Earth's mean radius in meters.
 const EARTH_RADIUS: f64 = 6_371_000.0;

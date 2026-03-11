@@ -126,6 +126,7 @@ fn latlon_to_px(lat: f64, lon: f64, proj: &dyn Projection, map_w: u32, map_h: u3
 
 /// Convert map-area pixel (px, py) to grid coordinates (gx, gy)
 #[inline]
+#[allow(dead_code)]
 fn px_to_grid(px: u32, py: u32, map_w: u32, map_h: u32, nx: usize, ny: usize) -> (f32, f32) {
     let gx = px as f32 * nx as f32 / map_w as f32;
     let gy = (map_h - 1 - py) as f32 * ny as f32 / map_h as f32;

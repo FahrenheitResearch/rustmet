@@ -624,24 +624,6 @@ fn build_projection(grid: &grib2::GridDefinition) -> Result<Box<dyn projection::
 // Helper: render a GribProduct from parsed GRIB2 messages
 // ============================================================
 
-/// Find a GRIB2 message matching a parameter by discipline + category + number + level.
-fn find_grib_message<'a>(
-    grib: &'a grib2::Grib2File,
-    discipline: u8,
-    category: u8,
-    parameter: u8,
-    level_type: u8,
-    level_value: f64,
-) -> Option<&'a grib2::Grib2Message> {
-    grib.messages.iter().find(|m| {
-        m.discipline == discipline
-            && m.product.parameter_category == category
-            && m.product.parameter_number == parameter
-            && m.product.level_type == level_type
-            && (m.product.level_value - level_value).abs() < 0.5
-    })
-}
-
 /// Find a GRIB2 message by matching its variable pattern string (e.g. "TMP:2 m above ground").
 fn find_msg_by_var<'a>(
     grib: &'a grib2::Grib2File,
@@ -898,9 +880,6 @@ fn grib_product_to_render_product(gprod: &products::GribProduct) -> products::Pr
         products::RenderStyle::FilledContour
     };
 
-    // Determine display name and units label
-    let display_name = product_display_title(gprod);
-
     products::Product {
         name: gprod.name,
         product_name_fn: match gprod.name {
@@ -942,10 +921,6 @@ fn grib_product_to_render_product(gprod: &products::GribProduct) -> products::Pr
         custom_levels: None,
         custom_cbar_ticks: None,
     }
-}
-
-fn product_display_title(gprod: &products::GribProduct) -> String {
-    format!("{} ({})", gprod.description, gprod.units)
 }
 
 /// Map GribProduct ranges to contour parameters, accounting for unit conversions.

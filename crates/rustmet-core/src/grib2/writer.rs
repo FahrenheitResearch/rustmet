@@ -92,7 +92,7 @@ impl MessageBuilder {
     }
 
     /// Set a bitmap (true = value present, false = missing).
-    /// When a bitmap is used, only values where bitmap[i] == true are packed.
+    /// When a bitmap is used, only values where `bitmap[i] == true` are packed.
     pub fn bitmap(mut self, bitmap: Vec<bool>) -> Self {
         self.bitmap = Some(bitmap);
         self

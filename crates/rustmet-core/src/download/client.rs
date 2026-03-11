@@ -13,6 +13,7 @@ use super::cache::DiskCache;
 /// parallel chunk downloads, and optional disk caching.
 pub struct DownloadClient {
     agent: ureq::Agent,
+    #[allow(dead_code)]
     timeout: Duration,
     max_retries: u32,
     cache: Option<DiskCache>,
