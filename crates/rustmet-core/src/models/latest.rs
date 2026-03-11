@@ -1,7 +1,8 @@
-/// Detect the latest available model run by probing AWS/.idx files.
+/// Detect the latest available model run by probing NOMADS .idx files.
 ///
 /// Strategy: start from the current UTC hour and work backwards up to 48 hours,
-/// checking whether the f00 .idx file exists for each candidate run.
+/// checking whether the f00 .idx file exists on NOMADS (NCEP's operational server).
+/// NOMADS is the authoritative source — new runs appear there first.
 
 use chrono::{Utc, TimeDelta};
 use crate::download::DownloadClient;
@@ -51,11 +52,12 @@ pub fn find_latest_run(client: &DownloadClient, model: &str) -> Result<(String, 
 
         let date_str = candidate.format("%Y%m%d").to_string();
 
+        // Probe NOMADS first — it's the authoritative source and gets new runs first
         let idx_url = match model_lower.as_str() {
-            "hrrr" => HrrrConfig::idx_url(&date_str, hour, "sfc", 0),
-            "gfs" => GfsConfig::idx_url(&date_str, hour, 0),
-            "nam" => NamConfig::idx_url(&date_str, hour, 0),
-            "rap" => RapConfig::idx_url(&date_str, hour, 0),
+            "hrrr" => format!("{}.idx", HrrrConfig::nomads_url(&date_str, hour, "sfc", 0)),
+            "gfs" => format!("{}.idx", GfsConfig::nomads_url(&date_str, hour, 0)),
+            "nam" => format!("{}.idx", NamConfig::nomads_url(&date_str, hour, 0)),
+            "rap" => format!("{}.idx", RapConfig::nomads_url(&date_str, hour, 0)),
             _ => unreachable!(),
         };
 

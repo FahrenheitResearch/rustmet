@@ -101,6 +101,8 @@ fn render_field(state: &mut AppState, ctx: &egui::Context) {
     let nx = state.field_nx;
     let ny = state.field_ny;
     if nx == 0 || ny == 0 { return; }
+    // Safety: ensure values match dimensions (prevents panic on variable switch)
+    if values.len() != nx * ny { return; }
 
     let cmap_name = state.colormap_name();
 
@@ -192,10 +194,11 @@ pub fn map_view(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
     );
 
     // ── Draw basemap borders ──────────────────────────
+    let flip_j = state.scan_mode & 0x40 != 0;
     if let Some(ref grib) = state.grib {
         if let Some(msg) = state.selected_msg.and_then(|i| grib.messages.get(i)) {
             if let Some(proj) = build_projection(&msg.grid) {
-                draw_borders(&painter, img_rect, state.field_nx, state.field_ny, proj.as_ref(), &clip);
+                draw_borders(&painter, img_rect, state.field_nx, state.field_ny, proj.as_ref(), &clip, flip_j);
             }
         }
     }
@@ -217,7 +220,46 @@ pub fn map_view(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
         }
     }
 
-    // Hover
+    // ── Sounding point marker (draw before hover so it's behind crosshair) ──
+    if state.sounding_grid_i < state.field_nx && state.sounding_grid_j < state.field_ny {
+        let si = state.sounding_grid_i;
+        let sj = state.sounding_grid_j;
+        let sx = img_rect.min.x + (si as f32 + 0.5) / state.field_nx as f32 * display_size.x;
+        let sy = img_rect.min.y + (sj as f32 + 0.5) / state.field_ny as f32 * display_size.y;
+        let spos = egui::pos2(sx, sy);
+        if img_rect.contains(spos) {
+            // Crosshair at sounding point
+            let sc = egui::Color32::from_rgb(255, 255, 0);
+            painter.circle_stroke(spos, 8.0, egui::Stroke::new(2.0, sc));
+            painter.circle_stroke(spos, 2.0, egui::Stroke::new(1.5, sc));
+            painter.line_segment(
+                [egui::pos2(sx - 14.0, sy), egui::pos2(sx - 5.0, sy)],
+                egui::Stroke::new(1.5, sc),
+            );
+            painter.line_segment(
+                [egui::pos2(sx + 5.0, sy), egui::pos2(sx + 14.0, sy)],
+                egui::Stroke::new(1.5, sc),
+            );
+            painter.line_segment(
+                [egui::pos2(sx, sy - 14.0), egui::pos2(sx, sy - 5.0)],
+                egui::Stroke::new(1.5, sc),
+            );
+            painter.line_segment(
+                [egui::pos2(sx, sy + 5.0), egui::pos2(sx, sy + 14.0)],
+                egui::Stroke::new(1.5, sc),
+            );
+            // Label
+            painter.text(
+                egui::pos2(sx + 16.0, sy - 12.0),
+                egui::Align2::LEFT_BOTTOM,
+                "SND",
+                egui::FontId::new(10.0, egui::FontFamily::Monospace),
+                sc,
+            );
+        }
+    }
+
+    // Hover + right-click to set sounding point
     if let Some(hover_pos) = response.hover_pos() {
         if img_rect.contains(hover_pos) {
             let rel_x = (hover_pos.x - img_rect.min.x) / display_size.x;
@@ -228,12 +270,25 @@ pub fn map_view(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
             if gi < state.field_nx && gj < state.field_ny {
                 state.hover_grid = Some((gi, gj));
 
+                // Right-click: set sounding/hodograph grid point
+                if response.secondary_clicked() {
+                    state.sounding_grid_i = gi;
+                    state.sounding_grid_j = gj;
+                    state.status = format!("Sounding point set: ({}, {})", gi, gj);
+                }
+
                 // Get lat/lon if projection available
+                // When data was flipped (scan_mode 0x40), display gj=0 is north
+                // but projection gj=0 is south, so we must reverse
+                let proj_gj = if flip_j {
+                    (state.field_ny - 1 - gj) as f64
+                } else {
+                    gj as f64
+                };
                 let latlon_str = if let Some(ref grib) = state.grib {
                     if let Some(msg) = state.selected_msg.and_then(|i| grib.messages.get(i)) {
                         if let Some(proj) = build_projection(&msg.grid) {
-                            use wx_field::projection::Projection;
-                            let (lat, lon) = proj.grid_to_latlon(gi as f64, gj as f64);
+                            let (lat, lon) = proj.grid_to_latlon(gi as f64, proj_gj);
                             Some(format!("{:.2}N {:.2}W", lat, -lon))
                         } else { None }
                     } else { None }
@@ -260,13 +315,12 @@ pub fn map_view(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
                 // Tooltip
                 if let Some(val) = state.hover_value {
                     let tip = if let Some(ref ll) = latlon_str {
-                        format!("{}  val={:.2}", ll, val)
+                        format!("{}  val={:.2}  [R-click: set sounding]", ll, val)
                     } else {
-                        format!("({},{})  val={:.2}", gi, gj, val)
+                        format!("({},{})  val={:.2}  [R-click: set sounding]", gi, gj, val)
                     };
                     let font = egui::FontId::new(11.0, egui::FontFamily::Monospace);
                     let tip_pos = hover_pos + egui::vec2(14.0, -18.0);
-                    // Background
                     let galley = painter.layout_no_wrap(tip.clone(), font.clone(), egui::Color32::WHITE);
                     let bg = egui::Rect::from_min_size(tip_pos - egui::vec2(2.0, galley.size().y + 1.0), galley.size() + egui::vec2(4.0, 2.0));
                     painter.rect_filled(bg, 2.0, egui::Color32::from_black_alpha(180));
@@ -305,9 +359,8 @@ fn draw_borders(
     ny: usize,
     proj: &dyn wx_field::projection::Projection,
     clip: &egui::Rect,
+    flip_j: bool,
 ) {
-    use wx_field::projection::Projection;
-
     let Some(geo) = get_geodata() else { return };
 
     let scale_x = img_rect.width() / nx as f32;
@@ -321,7 +374,10 @@ fn draw_borders(
             return None;
         }
         let px = img_rect.min.x + gi as f32 * scale_x;
-        let py = img_rect.min.y + gj as f32 * scale_y;
+        // When data was flipped for display (scan_mode 0x40), projection j=0 is
+        // south but display row 0 is north, so reverse the j mapping
+        let display_gj = if flip_j { (ny as f64 - 1.0) - gj } else { gj };
+        let py = img_rect.min.y + display_gj as f32 * scale_y;
         Some(egui::pos2(px, py))
     };
 

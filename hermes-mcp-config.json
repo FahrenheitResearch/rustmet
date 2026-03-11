@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "wx-tools": {
+      "command": "wx-mcp",
+      "args": [],
+      "description": "Pure-Rust weather data platform — fastest weather tools in existence"
+    }
+  }
+}

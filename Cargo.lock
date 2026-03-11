@@ -727,6 +727,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
+name = "bzip2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
+dependencies = [
+ "bzip2-sys",
+]
+
+[[package]]
+name = "bzip2-sys"
+version = "0.1.13+1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225bff33b2141874fe80d71e07d6eec4f85c5c216453dd96388240f96e1acc14"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
 name = "calloop"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4145,6 +4164,7 @@ checksum = "758025cb5fccfd3bc2fd74708fd4682be41d99e5dff73c377c0646c6012c73a4"
 dependencies = [
  "log",
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki 0.103.9",
  "subtle",
@@ -6047,6 +6067,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
+name = "wx-agent"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "flate2",
+ "rustmet-core",
+ "serde",
+ "serde_json",
+ "ureq",
+ "wx-alerts",
+ "wx-field",
+ "wx-math",
+ "wx-obs",
+ "wx-radar",
+ "wx-sounding",
+]
+
+[[package]]
+name = "wx-alerts"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
 name = "wx-field"
 version = "0.1.0"
 dependencies = [
@@ -6062,6 +6111,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "wx-lite"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "flate2",
+ "rustmet-core",
+ "serde",
+ "serde_json",
+ "ureq",
+ "wx-alerts",
+ "wx-obs",
+]
+
+[[package]]
 name = "wx-math"
 version = "0.1.0"
 dependencies = [
@@ -6070,9 +6134,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "wx-mcp"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "wx-obs"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "wx-pro"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "flate2",
+ "rustmaps",
+ "rustmet-core",
+ "serde",
+ "serde_json",
+ "ureq",
+ "wx-alerts",
+ "wx-field",
+ "wx-math",
+ "wx-obs",
+ "wx-radar",
+ "wx-sounding",
+]
+
+[[package]]
 name = "wx-radar"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
+ "bzip2",
+ "chrono",
+ "flate2",
+ "rayon",
  "wx-field",
 ]
 
@@ -6085,6 +6192,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wx-sounding"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "ureq",
+ "wx-math",
+]
+
+[[package]]
 name = "wx-ui"
 version = "0.1.0"
 dependencies = [
@@ -6092,11 +6210,14 @@ dependencies = [
  "eframe 0.29.1",
  "egui 0.29.1",
  "egui_extras",
+ "flate2",
  "rfd",
  "rustmaps",
  "rustmet-core",
+ "ureq",
  "wx-field",
  "wx-math",
+ "wx-radar",
 ]
 
 [[package]]

@@ -1,0 +1,27 @@
+[package]
+name = "wx-pro"
+version = "0.1.0"
+edition = "2021"
+description = "Super advanced AI meteorologist agent — full power, maximum data"
+license = "MIT"
+authors = ["Fahrenheit Research"]
+
+[[bin]]
+name = "wx-pro"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+rustmet-core = { path = "../rustmet-core" }
+wx-math = { path = "../wx-math" }
+wx-field = { path = "../wx-field" }
+wx-obs = { path = "../wx-obs" }
+wx-alerts = { path = "../wx-alerts" }
+wx-sounding = { path = "../wx-sounding" }
+wx-radar = { path = "../wx-radar" }
+ureq = { version = "3", features = ["rustls"] }
+flate2 = "1"
+rustmaps = { git = "https://github.com/FahrenheitResearch/rustmaps.git" }

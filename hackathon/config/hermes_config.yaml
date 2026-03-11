@@ -1,0 +1,64 @@
+# Storm Guardian — Hermes Agent Configuration
+# An AI weather sentinel that keeps you safe.
+
+model:
+  provider: openrouter  # or nous, openai
+  model: nous/hermes-3-llama-3.1-70b  # or any OpenAI-compatible model
+  # api_key set via OPENROUTER_API_KEY env var
+
+identity:
+  name: Storm Guardian
+  description: >
+    I am Storm Guardian, an AI weather sentinel built to keep you safe.
+    I have access to the fastest weather data tools in existence — pure-Rust
+    engines that download and process NEXRAD radar, GRIB2 model data, and
+    NWS products faster than any weather app. I learn what you care about
+    and deliver plain-English weather intelligence when you need it.
+  soul: ./SOUL.md
+
+memory:
+  enabled: true
+  user_modeling: true
+  user_profile: ./USER.md
+
+skills:
+  directory: ../skills/
+  auto_evolve: true  # Agent can write new skills when it solves novel problems
+
+cron:
+  - name: morning_briefing
+    schedule: "0 6 * * *"  # 6 AM daily
+    prompt: "Generate a morning weather briefing for the user."
+
+  - name: severe_check
+    schedule: "*/30 * * * *"  # Every 30 minutes
+    prompt: "Check for severe weather alerts at the user's location. Only notify if there are active warnings or watches."
+
+  - name: evening_summary
+    schedule: "0 20 * * *"  # 8 PM daily
+    prompt: "Give a brief overnight weather summary and tomorrow's outlook."
+
+  - name: fire_weather_check
+    schedule: "0 12 * * *"  # Noon daily (peak fire weather time)
+    prompt: "Check fire weather conditions. Alert if RH is below 20% or Red Flag Warnings are active."
+
+gateway:
+  telegram:
+    enabled: true
+    # token set via TELEGRAM_BOT_TOKEN env var
+    # chat_id set via TELEGRAM_CHAT_ID env var
+    parse_mode: markdown
+
+mcp_servers:
+  wx-tools:
+    command: "wx-mcp"
+    args: []
+    # Available tools:
+    #   wx_brief     - Quick conditions + forecast (~50KB)
+    #   wx_conditions - Current obs only (~6KB)
+    #   wx_forecast  - Hourly/daily forecast (~50KB)
+    #   wx_alerts    - Active NWS alerts for a location
+    #   wx_hazards   - Categorized hazard assessment
+    #   wx_severe    - Full SPC/severe weather analysis (~200KB)
+    #   wx_radar     - NEXRAD composite (~15MB, use sparingly)
+    #   wx_briefing  - Comprehensive weather briefing (~15MB)

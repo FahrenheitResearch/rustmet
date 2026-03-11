@@ -25,6 +25,11 @@ rfd = "0.15"
 rustmet-core = { path = "../rustmet-core" }
 wx-field = { path = "../wx-field" }
 wx-math = { path = "../wx-math" }
+wx-radar = { path = "../wx-radar" }
+
+# HTTP for radar downloads
+ureq = { version = "3", features = ["rustls"] }
+flate2 = "1"
 
 # Geographic data (basemaps)
 rustmaps = { git = "https://github.com/FahrenheitResearch/rustmaps.git" }

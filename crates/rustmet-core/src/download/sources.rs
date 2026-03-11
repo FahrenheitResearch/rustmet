@@ -90,28 +90,28 @@ fn hrrr_azure_url(date: &str, hour: u32, product: &str, fhour: u32) -> String {
 fn hrrr_sources() -> Vec<DataSource> {
     vec![
         DataSource {
-            name: "aws",
-            url_fn: hrrr_aws_url,
-            idx_fn: None, // default: .grib2.idx
+            name: "nomads",
+            url_fn: hrrr_nomads_url,
+            idx_fn: None,
             idx_available: true,
             priority: 1,
-            max_age_hours: None, // full archive
+            max_age_hours: Some(48),
         },
         DataSource {
-            name: "google",
-            url_fn: hrrr_google_url,
+            name: "aws",
+            url_fn: hrrr_aws_url,
             idx_fn: None,
             idx_available: true,
             priority: 2,
             max_age_hours: None,
         },
         DataSource {
-            name: "nomads",
-            url_fn: hrrr_nomads_url,
+            name: "google",
+            url_fn: hrrr_google_url,
             idx_fn: None,
             idx_available: true,
             priority: 3,
-            max_age_hours: Some(48), // ~2 days
+            max_age_hours: None,
         },
         DataSource {
             name: "azure",
@@ -158,11 +158,19 @@ fn gfs_ncei_url(date: &str, hour: u32, _product: &str, fhour: u32) -> String {
 fn gfs_sources() -> Vec<DataSource> {
     vec![
         DataSource {
+            name: "nomads",
+            url_fn: gfs_nomads_url,
+            idx_fn: None,
+            idx_available: true,
+            priority: 1,
+            max_age_hours: Some(48),
+        },
+        DataSource {
             name: "aws",
             url_fn: gfs_aws_url,
             idx_fn: None,
             idx_available: true,
-            priority: 1,
+            priority: 2,
             max_age_hours: None,
         },
         DataSource {
@@ -170,16 +178,8 @@ fn gfs_sources() -> Vec<DataSource> {
             url_fn: gfs_google_url,
             idx_fn: None,
             idx_available: true,
-            priority: 2,
-            max_age_hours: None,
-        },
-        DataSource {
-            name: "nomads",
-            url_fn: gfs_nomads_url,
-            idx_fn: None,
-            idx_available: true,
             priority: 3,
-            max_age_hours: Some(48),
+            max_age_hours: None,
         },
         DataSource {
             name: "ncei",
@@ -187,7 +187,7 @@ fn gfs_sources() -> Vec<DataSource> {
             idx_fn: None,
             idx_available: false,
             priority: 4,
-            max_age_hours: None, // historical archive
+            max_age_hours: None,
         },
     ]
 }
@@ -240,20 +240,20 @@ fn rap_nomads_url(date: &str, hour: u32, _product: &str, fhour: u32) -> String {
 fn rap_sources() -> Vec<DataSource> {
     vec![
         DataSource {
-            name: "aws",
-            url_fn: rap_aws_url,
-            idx_fn: None,
-            idx_available: true,
-            priority: 1,
-            max_age_hours: None,
-        },
-        DataSource {
             name: "nomads",
             url_fn: rap_nomads_url,
             idx_fn: None,
             idx_available: true,
-            priority: 2,
+            priority: 1,
             max_age_hours: Some(48),
+        },
+        DataSource {
+            name: "aws",
+            url_fn: rap_aws_url,
+            idx_fn: None,
+            idx_available: true,
+            priority: 2,
+            max_age_hours: None,
         },
     ]
 }

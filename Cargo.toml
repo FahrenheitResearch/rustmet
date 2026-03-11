@@ -8,6 +8,13 @@ members = [
     "crates/wx-radar",
     "crates/wx-render",
     "crates/wx-ui",
+    "crates/wx-alerts",
+    "crates/wx-agent",
+    "crates/wx-obs",
+    "crates/wx-sounding",
+    "crates/wx-lite",
+    "crates/wx-pro",
+    "crates/wx-mcp",
 ]
 exclude = ["crates/rustmet-wasm"]
 resolver = "2"

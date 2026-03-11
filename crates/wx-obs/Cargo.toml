@@ -1,0 +1,13 @@
+[package]
+name = "wx-obs"
+version = "0.1.0"
+edition = "2021"
+description = "Surface weather observations — METAR/TAF parser and fetcher"
+license = "MIT"
+authors = ["Fahrenheit Research"]
+
+[dependencies]
+ureq = { version = "3", features = ["rustls"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -35,6 +35,38 @@ pub enum RadarProduct {
 }
 
 impl RadarProduct {
+    /// Parse product from NEXRAD moment name (e.g. "REF", "VEL", "ZDR").
+    pub fn from_name(name: &str) -> Self {
+        match name.trim() {
+            "REF" | "DREF" => Self::Reflectivity,
+            "VEL" | "DVEL" => Self::Velocity,
+            "SW" | "DSW" => Self::SpectrumWidth,
+            "ZDR" => Self::DifferentialReflectivity,
+            "RHO" | "CC" => Self::CorrelationCoefficient,
+            "PHI" => Self::DifferentialPhase,
+            "KDP" => Self::SpecificDifferentialPhase,
+            "HHC" | "HCA" => Self::HydrometeorClassification,
+            _ => Self::Reflectivity, // fallback
+        }
+    }
+
+    /// Base product (for future super-res support).
+    pub fn base_product(&self) -> Self {
+        *self
+    }
+
+    /// Products available for display in UI.
+    pub fn all_display() -> &'static [Self] {
+        &[
+            Self::Reflectivity,
+            Self::Velocity,
+            Self::SpectrumWidth,
+            Self::DifferentialReflectivity,
+            Self::CorrelationCoefficient,
+            Self::SpecificDifferentialPhase,
+        ]
+    }
+
     /// Human-readable display name.
     pub fn display_name(&self) -> &'static str {
         match self {

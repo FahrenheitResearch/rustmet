@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "wx-tools": {
+      "command": "C:\\Users\\drew\\rustmet\\target\\release\\wx-mcp.exe",
+      "args": [],
+      "cwd": "C:\\Users\\drew\\rustmet"
+    }
+  }
+}

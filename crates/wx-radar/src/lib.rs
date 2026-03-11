@@ -1,10 +1,9 @@
-//! Radar-specific processing for NEXRAD and other weather radars.
-//!
-//! Provides radar product definitions, derived products (VIL, echo tops),
-//! rotation detection (mesocyclone, TVS), and storm-relative velocity.
-//! Future: full implementation migrated from rustdar.
+//! NEXRAD Level-II radar processing — parser, PPI renderer, color tables.
 
 pub mod products;
+pub mod level2;
+pub mod color_table;
+pub mod render;
 pub mod derived;
 pub mod detection;
 pub mod sites;

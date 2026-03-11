@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 use rustmet_core::grib2::{self, Grib2File, Grib2Message};
 
@@ -107,6 +108,12 @@ pub enum DownloadEvent {
     Error(String),
 }
 
+pub enum RadarEvent {
+    Status(String),
+    Data(Vec<u8>),
+    Error(String),
+}
+
 // ── Colormap names ──────────────────────────────────────────
 
 pub const COLORMAP_NAMES: &[&str] = &[
@@ -147,6 +154,7 @@ pub struct AppState {
     pub field_values: Option<Vec<f64>>,
     pub field_nx: usize,
     pub field_ny: usize,
+    pub scan_mode: u8,
 
     // Render
     pub field_texture: Option<egui::TextureHandle>,
@@ -160,8 +168,6 @@ pub struct AppState {
     pub show_colorbar: bool,
 
     // Sounding / hodograph
-    pub sounding_texture: Option<egui::TextureHandle>,
-    pub hodograph_texture: Option<egui::TextureHandle>,
     pub sounding_grid_i: usize,
     pub sounding_grid_j: usize,
 
@@ -191,6 +197,17 @@ pub struct AppState {
 
     // Export
     pub last_export: Option<PathBuf>,
+
+    // Radar
+    pub radar_station_idx: usize,
+    pub radar_file: Option<wx_radar::level2::Level2File>,
+    pub radar_product_idx: usize,
+    pub radar_sweep_idx: usize,
+    pub radar_texture: Option<egui::TextureHandle>,
+    pub radar_downloading: Arc<Mutex<bool>>,
+    pub radar_rx: Option<mpsc::Receiver<RadarEvent>>,
+    pub radar_status: String,
+    pub radar_range_km: f64,
 }
 
 impl Default for AppState {
@@ -204,6 +221,7 @@ impl Default for AppState {
             field_values: None,
             field_nx: 0,
             field_ny: 0,
+            scan_mode: 0,
             field_texture: None,
             colormap_idx: 0,
             vmin: 0.0,
@@ -213,8 +231,6 @@ impl Default for AppState {
             needs_rerender: false,
             contour_levels: 20,
             show_colorbar: true,
-            sounding_texture: None,
-            hodograph_texture: None,
             sounding_grid_i: 0,
             sounding_grid_j: 0,
             zoom: 1.0,
@@ -234,6 +250,15 @@ impl Default for AppState {
             hover_grid: None,
             recent_files: Vec::new(),
             last_export: None,
+            radar_station_idx: 0,
+            radar_file: None,
+            radar_product_idx: 0,
+            radar_sweep_idx: 0,
+            radar_texture: None,
+            radar_downloading: Arc::new(Mutex::new(false)),
+            radar_rx: None,
+            radar_status: String::new(),
+            radar_range_km: 0.0,
         }
     }
 }
@@ -295,6 +320,7 @@ impl AppState {
             return;
         }
         let msg = &grib.messages[idx];
+        self.scan_mode = msg.grid.scan_mode;
         match grib2::unpack_message_normalized(msg) {
             Ok(values) => {
                 self.field_nx = msg.grid.nx as usize;
