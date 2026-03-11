@@ -2308,6 +2308,626 @@ fn kinematic_flux<'py>(
     Ok(PyArray1::from_vec(py, result))
 }
 
+// ──────────────────────────────────────────────────────────
+// Additional metfuncs bindings
+// ──────────────────────────────────────────────────────────
+
+/// Wobus function for moist adiabats. Input: temperature in Celsius.
+#[pyfunction]
+fn wobf(t: f64) -> f64 {
+    metfuncs::wobf(t)
+}
+
+/// Saturated parcel lift. p in hPa, thetam in Celsius. Returns temperature in Celsius.
+#[pyfunction]
+fn satlift(p: f64, thetam: f64) -> f64 {
+    metfuncs::satlift(p, thetam)
+}
+
+/// Dry lift to LCL. Returns (p_lcl, t_lcl) in (hPa, Celsius).
+#[pyfunction]
+fn drylift(p: f64, t: f64, td: f64) -> (f64, f64) {
+    metfuncs::drylift(p, t, td)
+}
+
+/// Saturation vapor pressure (hPa) at given temperature (Celsius).
+#[pyfunction]
+fn vappres(t: f64) -> f64 {
+    metfuncs::vappres(t)
+}
+
+/// Virtual temperature (Celsius). t: temp (C), p: pressure (hPa), td: dewpoint (C).
+#[pyfunction]
+fn virtual_temp(t: f64, p: f64, td: f64) -> f64 {
+    metfuncs::virtual_temp(t, p, td)
+}
+
+/// Temperature (C) at given mixing ratio (g/kg) and pressure (hPa).
+#[pyfunction]
+fn temp_at_mixrat(w: f64, p: f64) -> f64 {
+    metfuncs::temp_at_mixrat(w, p)
+}
+
+/// Linear interpolation.
+#[pyfunction]
+fn interp_linear(x: f64, x1: f64, x2: f64, y1: f64, y2: f64) -> f64 {
+    metfuncs::interp_linear(x, x1, x2, y1, y2)
+}
+
+/// Interpolate height at a target pressure.
+#[pyfunction]
+fn get_height_at_pres(
+    target_p: f64,
+    p_prof: PyReadonlyArray1<f64>,
+    h_prof: PyReadonlyArray1<f64>,
+) -> PyResult<f64> {
+    Ok(metfuncs::get_height_at_pres(target_p, p_prof.as_slice()?, h_prof.as_slice()?))
+}
+
+/// Interpolate environmental T and Td at a target pressure. Returns (t, td) in Celsius.
+#[pyfunction]
+fn get_env_at_pres(
+    target_p: f64,
+    p_prof: PyReadonlyArray1<f64>,
+    t_prof: PyReadonlyArray1<f64>,
+    td_prof: PyReadonlyArray1<f64>,
+) -> PyResult<(f64, f64)> {
+    Ok(metfuncs::get_env_at_pres(
+        target_p, p_prof.as_slice()?, t_prof.as_slice()?, td_prof.as_slice()?,
+    ))
+}
+
+/// Mixed layer parcel. Returns (p, t, td) in (hPa, C, C).
+#[pyfunction]
+fn get_mixed_layer_parcel(
+    p_prof: PyReadonlyArray1<f64>,
+    t_prof: PyReadonlyArray1<f64>,
+    td_prof: PyReadonlyArray1<f64>,
+    depth: f64,
+) -> PyResult<(f64, f64, f64)> {
+    Ok(metfuncs::get_mixed_layer_parcel(
+        p_prof.as_slice()?, t_prof.as_slice()?, td_prof.as_slice()?, depth,
+    ))
+}
+
+/// Most unstable parcel. Returns (p, t, td) in (hPa, C, C).
+#[pyfunction]
+fn get_most_unstable_parcel(
+    p_prof: PyReadonlyArray1<f64>,
+    t_prof: PyReadonlyArray1<f64>,
+    td_prof: PyReadonlyArray1<f64>,
+    depth: f64,
+) -> PyResult<(f64, f64, f64)> {
+    Ok(metfuncs::get_most_unstable_parcel(
+        p_prof.as_slice()?, t_prof.as_slice()?, td_prof.as_slice()?, depth,
+    ))
+}
+
+/// Convert Celsius to Fahrenheit.
+#[pyfunction]
+fn celsius_to_fahrenheit(t: f64) -> f64 {
+    metfuncs::celsius_to_fahrenheit(t)
+}
+
+/// Convert Fahrenheit to Celsius.
+#[pyfunction]
+fn fahrenheit_to_celsius(t: f64) -> f64 {
+    metfuncs::fahrenheit_to_celsius(t)
+}
+
+/// Convert Celsius to Kelvin.
+#[pyfunction]
+fn celsius_to_kelvin(t: f64) -> f64 {
+    metfuncs::celsius_to_kelvin(t)
+}
+
+/// Convert Kelvin to Celsius.
+#[pyfunction]
+fn kelvin_to_celsius(t: f64) -> f64 {
+    metfuncs::kelvin_to_celsius(t)
+}
+
+/// Saturation vapor pressure (hPa) using Bolton (1980). Input: Celsius.
+#[pyfunction]
+fn saturation_vapor_pressure(t_c: f64) -> f64 {
+    metfuncs::saturation_vapor_pressure(t_c)
+}
+
+/// Dewpoint (C) from temperature (C) and relative humidity (%).
+#[pyfunction]
+fn dewpoint_from_rh(t_c: f64, rh: f64) -> f64 {
+    metfuncs::dewpoint_from_rh(t_c, rh)
+}
+
+/// Relative humidity (%) from temperature and dewpoint (both Celsius).
+#[pyfunction]
+fn rh_from_dewpoint(t_c: f64, td_c: f64) -> f64 {
+    metfuncs::rh_from_dewpoint(t_c, td_c)
+}
+
+/// Specific humidity (kg/kg) from pressure (hPa) and mixing ratio (g/kg).
+#[pyfunction]
+fn specific_humidity(p_hpa: f64, w_gkg: f64) -> f64 {
+    metfuncs::specific_humidity(p_hpa, w_gkg)
+}
+
+/// Mixing ratio (g/kg) from specific humidity (kg/kg).
+#[pyfunction]
+fn mixing_ratio_from_specific_humidity(q: f64) -> f64 {
+    metfuncs::mixing_ratio_from_specific_humidity(q)
+}
+
+/// Saturation mixing ratio (g/kg) at given pressure (hPa) and temperature (C).
+#[pyfunction]
+fn saturation_mixing_ratio(p_hpa: f64, t_c: f64) -> f64 {
+    metfuncs::saturation_mixing_ratio(p_hpa, t_c)
+}
+
+/// Vapor pressure (hPa) from dewpoint (Celsius).
+#[pyfunction]
+fn vapor_pressure_from_dewpoint(td_c: f64) -> f64 {
+    metfuncs::vapor_pressure_from_dewpoint(td_c)
+}
+
+/// Wet bulb temperature (Celsius). p in hPa, t and td in Celsius.
+#[pyfunction]
+fn wet_bulb_temperature(p_hpa: f64, t_c: f64, td_c: f64) -> f64 {
+    metfuncs::wet_bulb_temperature(p_hpa, t_c, td_c)
+}
+
+/// Frost point temperature (C) from temperature (C) and relative humidity (%).
+#[pyfunction]
+fn frost_point(t_c: f64, rh: f64) -> f64 {
+    metfuncs::frost_point(t_c, rh)
+}
+
+/// Psychrometric vapor pressure (hPa). t_c: dry bulb, tw_c: wet bulb, p_hpa: pressure.
+#[pyfunction]
+fn psychrometric_vapor_pressure(t_c: f64, tw_c: f64, p_hpa: f64) -> f64 {
+    metfuncs::psychrometric_vapor_pressure(t_c, tw_c, p_hpa)
+}
+
+/// Potential temperature (K) from pressure (hPa) and temperature (Celsius).
+#[pyfunction]
+fn potential_temperature(p_hpa: f64, t_c: f64) -> f64 {
+    metfuncs::potential_temperature(p_hpa, t_c)
+}
+
+/// Equivalent potential temperature (K) using Bolton (1980).
+#[pyfunction]
+fn equivalent_potential_temperature(p_hpa: f64, t_c: f64, td_c: f64) -> f64 {
+    metfuncs::equivalent_potential_temperature(p_hpa, t_c, td_c)
+}
+
+/// Wet bulb potential temperature (K). p in hPa, t and td in Celsius.
+#[pyfunction]
+fn wet_bulb_potential_temperature(p_hpa: f64, t_c: f64, td_c: f64) -> f64 {
+    metfuncs::wet_bulb_potential_temperature(p_hpa, t_c, td_c)
+}
+
+/// Virtual potential temperature (K). p in hPa, t in C, w in g/kg.
+#[pyfunction]
+fn virtual_potential_temperature(p_hpa: f64, t_c: f64, w_gkg: f64) -> f64 {
+    metfuncs::virtual_potential_temperature(p_hpa, t_c, w_gkg)
+}
+
+/// LCL pressure (hPa) from surface p (hPa), t (C), td (C).
+#[pyfunction]
+fn lcl_pressure(p_hpa: f64, t_c: f64, td_c: f64) -> f64 {
+    metfuncs::lcl_pressure(p_hpa, t_c, td_c)
+}
+
+/// Level of Free Convection. Returns Option<(pressure_hPa, temperature_C)>.
+#[pyfunction]
+fn py_lfc(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<Option<(f64, f64)>> {
+    Ok(metfuncs::lfc(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Equilibrium Level. Returns Option<(pressure_hPa, temperature_C)>.
+#[pyfunction]
+fn py_el(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<Option<(f64, f64)>> {
+    Ok(metfuncs::el(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Lifted index (from metfuncs). Profiles surface-first.
+#[pyfunction]
+fn py_lifted_index(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<f64> {
+    Ok(metfuncs::lifted_index(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Convective Condensation Level. Returns Option<(pressure_hPa, temperature_C)>.
+#[pyfunction]
+fn py_ccl(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<Option<(f64, f64)>> {
+    Ok(metfuncs::ccl(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Convective temperature (Celsius).
+#[pyfunction]
+fn convective_temperature(
+    p: PyReadonlyArray1<f64>,
+    t: PyReadonlyArray1<f64>,
+    td: PyReadonlyArray1<f64>,
+) -> PyResult<f64> {
+    Ok(metfuncs::convective_temperature(p.as_slice()?, t.as_slice()?, td.as_slice()?))
+}
+
+/// Air density (kg/m^3) from pressure (hPa), temperature (C), mixing ratio (g/kg).
+#[pyfunction]
+fn density(p_hpa: f64, t_c: f64, w_gkg: f64) -> f64 {
+    metfuncs::density(p_hpa, t_c, w_gkg)
+}
+
+/// Virtual temperature (C) from temperature (C), dewpoint (C), pressure (hPa).
+#[pyfunction]
+fn virtual_temperature_from_dewpoint(t_c: f64, td_c: f64, p_hpa: f64) -> f64 {
+    metfuncs::virtual_temperature_from_dewpoint(t_c, td_c, p_hpa)
+}
+
+/// Hypsometric thickness (m) between two pressures. p in hPa, t_mean_k in K.
+#[pyfunction]
+fn thickness_hypsometric(p_bottom: f64, p_top: f64, t_mean_k: f64) -> f64 {
+    metfuncs::thickness_hypsometric(p_bottom, p_top, t_mean_k)
+}
+
+/// Standard atmosphere: pressure (hPa) to height (m).
+#[pyfunction]
+fn pressure_to_height_std(p_hpa: f64) -> f64 {
+    metfuncs::pressure_to_height_std(p_hpa)
+}
+
+/// Standard atmosphere: height (m) to pressure (hPa).
+#[pyfunction]
+fn height_to_pressure_std(h_m: f64) -> f64 {
+    metfuncs::height_to_pressure_std(h_m)
+}
+
+/// Altimeter setting to station pressure. alt in hPa, elevation in m.
+#[pyfunction]
+fn altimeter_to_station_pressure(alt_hpa: f64, elevation_m: f64) -> f64 {
+    metfuncs::altimeter_to_station_pressure(alt_hpa, elevation_m)
+}
+
+/// Station pressure to sea level pressure. p in hPa, elevation in m, t in C.
+#[pyfunction]
+fn station_to_sea_level_pressure(p_station: f64, elevation_m: f64, t_c: f64) -> f64 {
+    metfuncs::station_to_sea_level_pressure(p_station, elevation_m, t_c)
+}
+
+/// Dry static energy (J/kg). height in m, t_k in Kelvin.
+#[pyfunction]
+fn dry_static_energy(height_m: f64, t_k: f64) -> f64 {
+    metfuncs::dry_static_energy(height_m, t_k)
+}
+
+/// Moist static energy (J/kg). height in m, t_k in K, q in kg/kg.
+#[pyfunction]
+fn moist_static_energy(height_m: f64, t_k: f64, q_kgkg: f64) -> f64 {
+    metfuncs::moist_static_energy(height_m, t_k, q_kgkg)
+}
+
+/// Dewpoint (C) from vapor pressure (hPa).
+#[pyfunction]
+fn py_dewpoint(vapor_pressure_hpa: f64) -> f64 {
+    metfuncs::dewpoint(vapor_pressure_hpa)
+}
+
+/// Mixing ratio (g/kg) from relative humidity (%).
+#[pyfunction]
+fn mixing_ratio_from_relative_humidity(p_hpa: f64, t_c: f64, rh: f64) -> f64 {
+    metfuncs::mixing_ratio_from_relative_humidity(p_hpa, t_c, rh)
+}
+
+/// Relative humidity (%) from mixing ratio. p in hPa, t in C, w in g/kg.
+#[pyfunction]
+fn relative_humidity_from_mixing_ratio(p_hpa: f64, t_c: f64, w_gkg: f64) -> f64 {
+    metfuncs::relative_humidity_from_mixing_ratio(p_hpa, t_c, w_gkg)
+}
+
+/// Relative humidity (%) from specific humidity. p in hPa, t in C, q in kg/kg.
+#[pyfunction]
+fn relative_humidity_from_specific_humidity(p_hpa: f64, t_c: f64, q: f64) -> f64 {
+    metfuncs::relative_humidity_from_specific_humidity(p_hpa, t_c, q)
+}
+
+/// Specific humidity (kg/kg) from dewpoint. p in hPa, td in C.
+#[pyfunction]
+fn specific_humidity_from_dewpoint(p_hpa: f64, td_c: f64) -> f64 {
+    metfuncs::specific_humidity_from_dewpoint(p_hpa, td_c)
+}
+
+/// Dewpoint (C) from specific humidity. p in hPa, q in kg/kg.
+#[pyfunction]
+fn dewpoint_from_specific_humidity(p_hpa: f64, q: f64) -> f64 {
+    metfuncs::dewpoint_from_specific_humidity(p_hpa, q)
+}
+
+/// Saturation equivalent potential temperature (K). Assumes RH=100%.
+#[pyfunction]
+fn saturation_equivalent_potential_temperature(p_hpa: f64, t_c: f64) -> f64 {
+    metfuncs::saturation_equivalent_potential_temperature(p_hpa, t_c)
+}
+
+/// Scale height H = R*T/g (meters). t_k in Kelvin.
+#[pyfunction]
+fn scale_height(t_k: f64) -> f64 {
+    metfuncs::scale_height(t_k)
+}
+
+/// Convert vertical velocity w (m/s) to omega (Pa/s).
+#[pyfunction]
+fn vertical_velocity_pressure(w_ms: f64, p_hpa: f64, t_c: f64) -> f64 {
+    metfuncs::vertical_velocity_pressure(w_ms, p_hpa, t_c)
+}
+
+/// Convert omega (Pa/s) to vertical velocity w (m/s).
+#[pyfunction]
+fn vertical_velocity(omega_pas: f64, p_hpa: f64, t_c: f64) -> f64 {
+    metfuncs::vertical_velocity(omega_pas, p_hpa, t_c)
+}
+
+/// Static stability parameter at each level. p in hPa, t_k in Kelvin.
+#[pyfunction]
+fn static_stability<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    t_k: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::static_stability(p.as_slice()?, t_k.as_slice()?);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Pressure-weighted mean of values over pressure levels.
+#[pyfunction]
+fn mean_pressure_weighted(
+    p: PyReadonlyArray1<f64>,
+    values: PyReadonlyArray1<f64>,
+) -> PyResult<f64> {
+    Ok(metfuncs::mean_pressure_weighted(p.as_slice()?, values.as_slice()?))
+}
+
+/// Temperature (K) from potential temperature (K) and pressure (hPa).
+#[pyfunction]
+fn temperature_from_potential_temperature(p_hpa: f64, theta_k: f64) -> f64 {
+    metfuncs::temperature_from_potential_temperature(p_hpa, theta_k)
+}
+
+/// Convert geopotential (m^2/s^2) to geopotential height (m).
+#[pyfunction]
+fn geopotential_to_height(geopot: f64) -> f64 {
+    metfuncs::geopotential_to_height(geopot)
+}
+
+/// Convert geopotential height (m) to geopotential (m^2/s^2).
+#[pyfunction]
+fn height_to_geopotential(height_m: f64) -> f64 {
+    metfuncs::height_to_geopotential(height_m)
+}
+
+/// Convert sigma coordinate to pressure. p = sigma*(p_sfc - p_top) + p_top.
+#[pyfunction]
+fn sigma_to_pressure(sigma: f64, p_sfc: f64, p_top: f64) -> f64 {
+    metfuncs::sigma_to_pressure(sigma, p_sfc, p_top)
+}
+
+/// Brunt-Vaisala frequency (s^-1) at each level. p in hPa, t_k in Kelvin.
+#[pyfunction]
+fn brunt_vaisala_frequency<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    t_k: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::brunt_vaisala_frequency(p.as_slice()?, t_k.as_slice()?);
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Brunt-Vaisala period: 2*pi/N (seconds).
+#[pyfunction]
+fn brunt_vaisala_period(n: f64) -> f64 {
+    metfuncs::brunt_vaisala_period(n)
+}
+
+/// Gradient Richardson number at each level. theta (K), u,v (m/s), z (m).
+#[pyfunction]
+fn gradient_richardson_number<'py>(
+    py: Python<'py>,
+    theta: PyReadonlyArray1<f64>,
+    u: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray1<f64>,
+    z: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::gradient_richardson_number(
+        theta.as_slice()?, u.as_slice()?, v.as_slice()?, z.as_slice()?,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Turbulent kinetic energy: TKE = 0.5 * mean(u'^2 + v'^2 + w'^2).
+#[pyfunction]
+fn tke(
+    u_prime: PyReadonlyArray1<f64>,
+    v_prime: PyReadonlyArray1<f64>,
+    w_prime: PyReadonlyArray1<f64>,
+) -> PyResult<f64> {
+    Ok(metfuncs::tke(u_prime.as_slice()?, v_prime.as_slice()?, w_prime.as_slice()?))
+}
+
+/// Extract values within a pressure layer. Returns (p_layer, values_layer).
+#[pyfunction]
+fn get_layer<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    values: PyReadonlyArray1<f64>,
+    p_bottom: f64,
+    p_top: f64,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let (p_out, v_out) = metfuncs::get_layer(
+        p.as_slice()?, values.as_slice()?, p_bottom, p_top,
+    );
+    Ok((PyArray1::from_vec(py, p_out), PyArray1::from_vec(py, v_out)))
+}
+
+/// Extract height values within a pressure layer. Returns (p_layer, z_layer).
+#[pyfunction]
+fn get_layer_heights<'py>(
+    py: Python<'py>,
+    p: PyReadonlyArray1<f64>,
+    z: PyReadonlyArray1<f64>,
+    p_bottom: f64,
+    p_top: f64,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let (p_out, z_out) = metfuncs::get_layer_heights(
+        p.as_slice()?, z.as_slice()?, p_bottom, p_top,
+    );
+    Ok((PyArray1::from_vec(py, p_out), PyArray1::from_vec(py, z_out)))
+}
+
+/// Thinning mask for station plots. Returns list of bools where true = keep.
+#[pyfunction]
+fn reduce_point_density(
+    lats: PyReadonlyArray1<f64>,
+    lons: PyReadonlyArray1<f64>,
+    radius_deg: f64,
+) -> PyResult<Vec<bool>> {
+    Ok(metfuncs::reduce_point_density(
+        lats.as_slice()?, lons.as_slice()?, radius_deg,
+    ))
+}
+
+/// Mixed-layer average of a quantity in the lowest depth_hpa hPa.
+#[pyfunction]
+fn mixed_layer(
+    p: PyReadonlyArray1<f64>,
+    values: PyReadonlyArray1<f64>,
+    depth_hpa: f64,
+) -> PyResult<f64> {
+    Ok(metfuncs::mixed_layer(p.as_slice()?, values.as_slice()?, depth_hpa))
+}
+
+/// Corfidi storm motion vectors. Returns ((u_up, v_up), (u_down, v_down)).
+#[pyfunction]
+fn corfidi_storm_motion(
+    p: PyReadonlyArray1<f64>,
+    u: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray1<f64>,
+    z: PyReadonlyArray1<f64>,
+) -> PyResult<((f64, f64), (f64, f64))> {
+    Ok(metfuncs::corfidi_storm_motion(
+        p.as_slice()?, u.as_slice()?, v.as_slice()?, z.as_slice()?,
+    ))
+}
+
+/// Galvez-Davison Index for tropical convection. All temps in C, sst in C.
+#[pyfunction]
+fn galvez_davison_index(
+    t950: f64, t850: f64, t700: f64, t500: f64,
+    td950: f64, td850: f64, td700: f64, sst: f64,
+) -> f64 {
+    metfuncs::galvez_davison_index(t950, t850, t700, t500, td950, td850, td700, sst)
+}
+
+/// Exner function: Pi = (p/p0)^(R/Cp).
+#[pyfunction]
+fn exner_function(p_hpa: f64) -> f64 {
+    metfuncs::exner_function(p_hpa)
+}
+
+/// Montgomery streamfunction (J/kg). theta_k, p_hpa, t_k, z_m.
+#[pyfunction]
+fn montgomery_streamfunction(theta_k: f64, p_hpa: f64, t_k: f64, z_m: f64) -> f64 {
+    metfuncs::montgomery_streamfunction(theta_k, p_hpa, t_k, z_m)
+}
+
+/// Potential vorticity on isentropic surface. Returns PVU array.
+#[pyfunction]
+fn potential_vorticity_baroclinic<'py>(
+    py: Python<'py>,
+    theta: PyReadonlyArray1<f64>,
+    p: PyReadonlyArray1<f64>,
+    u: PyReadonlyArray1<f64>,
+    v: PyReadonlyArray1<f64>,
+    lats: PyReadonlyArray1<f64>,
+    nx: usize, ny: usize, dx: f64, dy: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let result = metfuncs::potential_vorticity_baroclinic(
+        theta.as_slice()?, p.as_slice()?, u.as_slice()?, v.as_slice()?,
+        lats.as_slice()?, nx, ny, dx, dy,
+    );
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Isentropic interpolation of 3D fields.
+/// Returns list of arrays: [pressure_on_theta, t_on_theta, field0_on_theta, ...].
+#[pyfunction]
+fn isentropic_interpolation<'py>(
+    py: Python<'py>,
+    theta_levels: PyReadonlyArray1<f64>,
+    p_3d: PyReadonlyArray1<f64>,
+    t_3d: PyReadonlyArray1<f64>,
+    fields: &Bound<'py, PyList>,
+    nx: usize, ny: usize, nz: usize,
+) -> PyResult<Bound<'py, PyList>> {
+    let theta_slice = theta_levels.as_slice()?;
+    let p_slice = p_3d.as_slice()?;
+    let t_slice = t_3d.as_slice()?;
+
+    // Extract field arrays
+    let mut field_vecs: Vec<Vec<f64>> = Vec::with_capacity(fields.len());
+    for item in fields.iter() {
+        let arr: PyReadonlyArray1<f64> = item.extract()?;
+        field_vecs.push(arr.as_slice()?.to_vec());
+    }
+    let field_refs: Vec<&[f64]> = field_vecs.iter().map(|v| v.as_slice()).collect();
+
+    let result = metfuncs::isentropic_interpolation(
+        theta_slice, p_slice, t_slice, &field_refs, nx, ny, nz,
+    );
+
+    let list = PyList::empty(py);
+    for arr in result {
+        list.append(PyArray1::from_vec(py, arr))?;
+    }
+    Ok(list)
+}
+
+/// Interpolate gridded data to a single lat/lon point.
+#[pyfunction]
+#[pyo3(signature = (values, lats, lons, nx, ny, target_lat, target_lon, method = "bilinear"))]
+fn interpolate_point(
+    values: PyReadonlyArray1<f64>,
+    lats: PyReadonlyArray1<f64>,
+    lons: PyReadonlyArray1<f64>,
+    nx: usize,
+    ny: usize,
+    target_lat: f64,
+    target_lon: f64,
+    method: &str,
+) -> PyResult<f64> {
+    let interp = regrid::InterpMethod::from_str_loose(method)
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(
+            format!("Unknown interpolation method '{}'. Use: bilinear, nearest, bicubic, budget", method)
+        ))?;
+    Ok(regrid::interpolate_point(
+        values.as_slice()?, lats.as_slice()?, lons.as_slice()?,
+        nx, ny, target_lat, target_lon, interp,
+    ))
+}
+
 /// First derivative along axis 0 (x) or axis 1 (y).
 #[pyfunction]
 fn first_derivative<'py>(
@@ -2828,6 +3448,82 @@ fn _rustmet(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(inertial_advective_wind, m)?)?;
     m.add_function(wrap_pyfunction!(absolute_momentum, m)?)?;
     m.add_function(wrap_pyfunction!(kinematic_flux, m)?)?;
+    // Additional metfuncs bindings
+    m.add_function(wrap_pyfunction!(wobf, m)?)?;
+    m.add_function(wrap_pyfunction!(satlift, m)?)?;
+    m.add_function(wrap_pyfunction!(drylift, m)?)?;
+    m.add_function(wrap_pyfunction!(vappres, m)?)?;
+    m.add_function(wrap_pyfunction!(virtual_temp, m)?)?;
+    m.add_function(wrap_pyfunction!(temp_at_mixrat, m)?)?;
+    m.add_function(wrap_pyfunction!(interp_linear, m)?)?;
+    m.add_function(wrap_pyfunction!(get_height_at_pres, m)?)?;
+    m.add_function(wrap_pyfunction!(get_env_at_pres, m)?)?;
+    m.add_function(wrap_pyfunction!(get_mixed_layer_parcel, m)?)?;
+    m.add_function(wrap_pyfunction!(get_most_unstable_parcel, m)?)?;
+    m.add_function(wrap_pyfunction!(celsius_to_fahrenheit, m)?)?;
+    m.add_function(wrap_pyfunction!(fahrenheit_to_celsius, m)?)?;
+    m.add_function(wrap_pyfunction!(celsius_to_kelvin, m)?)?;
+    m.add_function(wrap_pyfunction!(kelvin_to_celsius, m)?)?;
+    m.add_function(wrap_pyfunction!(saturation_vapor_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(dewpoint_from_rh, m)?)?;
+    m.add_function(wrap_pyfunction!(rh_from_dewpoint, m)?)?;
+    m.add_function(wrap_pyfunction!(specific_humidity, m)?)?;
+    m.add_function(wrap_pyfunction!(mixing_ratio_from_specific_humidity, m)?)?;
+    m.add_function(wrap_pyfunction!(saturation_mixing_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(vapor_pressure_from_dewpoint, m)?)?;
+    m.add_function(wrap_pyfunction!(wet_bulb_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(frost_point, m)?)?;
+    m.add_function(wrap_pyfunction!(psychrometric_vapor_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(potential_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(equivalent_potential_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(wet_bulb_potential_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(virtual_potential_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(lcl_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(py_lfc, m)?)?;
+    m.add_function(wrap_pyfunction!(py_el, m)?)?;
+    m.add_function(wrap_pyfunction!(py_lifted_index, m)?)?;
+    m.add_function(wrap_pyfunction!(py_ccl, m)?)?;
+    m.add_function(wrap_pyfunction!(convective_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(density, m)?)?;
+    m.add_function(wrap_pyfunction!(virtual_temperature_from_dewpoint, m)?)?;
+    m.add_function(wrap_pyfunction!(thickness_hypsometric, m)?)?;
+    m.add_function(wrap_pyfunction!(pressure_to_height_std, m)?)?;
+    m.add_function(wrap_pyfunction!(height_to_pressure_std, m)?)?;
+    m.add_function(wrap_pyfunction!(altimeter_to_station_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(station_to_sea_level_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(dry_static_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(moist_static_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(py_dewpoint, m)?)?;
+    m.add_function(wrap_pyfunction!(mixing_ratio_from_relative_humidity, m)?)?;
+    m.add_function(wrap_pyfunction!(relative_humidity_from_mixing_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(relative_humidity_from_specific_humidity, m)?)?;
+    m.add_function(wrap_pyfunction!(specific_humidity_from_dewpoint, m)?)?;
+    m.add_function(wrap_pyfunction!(dewpoint_from_specific_humidity, m)?)?;
+    m.add_function(wrap_pyfunction!(saturation_equivalent_potential_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(scale_height, m)?)?;
+    m.add_function(wrap_pyfunction!(vertical_velocity_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(vertical_velocity, m)?)?;
+    m.add_function(wrap_pyfunction!(static_stability, m)?)?;
+    m.add_function(wrap_pyfunction!(mean_pressure_weighted, m)?)?;
+    m.add_function(wrap_pyfunction!(temperature_from_potential_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(geopotential_to_height, m)?)?;
+    m.add_function(wrap_pyfunction!(height_to_geopotential, m)?)?;
+    m.add_function(wrap_pyfunction!(sigma_to_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(brunt_vaisala_frequency, m)?)?;
+    m.add_function(wrap_pyfunction!(brunt_vaisala_period, m)?)?;
+    m.add_function(wrap_pyfunction!(gradient_richardson_number, m)?)?;
+    m.add_function(wrap_pyfunction!(tke, m)?)?;
+    m.add_function(wrap_pyfunction!(get_layer, m)?)?;
+    m.add_function(wrap_pyfunction!(get_layer_heights, m)?)?;
+    m.add_function(wrap_pyfunction!(reduce_point_density, m)?)?;
+    m.add_function(wrap_pyfunction!(mixed_layer, m)?)?;
+    m.add_function(wrap_pyfunction!(corfidi_storm_motion, m)?)?;
+    m.add_function(wrap_pyfunction!(galvez_davison_index, m)?)?;
+    m.add_function(wrap_pyfunction!(exner_function, m)?)?;
+    m.add_function(wrap_pyfunction!(montgomery_streamfunction, m)?)?;
+    m.add_function(wrap_pyfunction!(potential_vorticity_baroclinic, m)?)?;
+    m.add_function(wrap_pyfunction!(isentropic_interpolation, m)?)?;
+    m.add_function(wrap_pyfunction!(interpolate_point, m)?)?;
     m.add_function(wrap_pyfunction!(first_derivative, m)?)?;
     m.add_function(wrap_pyfunction!(second_derivative, m)?)?;
     // GRIB2 field operations

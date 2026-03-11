@@ -1700,3 +1700,175 @@ pub fn level_name(level_type: u8) -> &'static str {
         _ => "Unknown Level Type",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parameter_name tests ----
+
+    #[test]
+    fn test_parameter_name_temperature() {
+        assert_eq!(parameter_name(0, 0, 0), "Temperature");
+    }
+
+    #[test]
+    fn test_parameter_name_dewpoint() {
+        assert_eq!(parameter_name(0, 0, 6), "Dewpoint Temperature");
+    }
+
+    #[test]
+    fn test_parameter_name_relative_humidity() {
+        assert_eq!(parameter_name(0, 1, 1), "Relative Humidity");
+    }
+
+    #[test]
+    fn test_parameter_name_u_wind() {
+        assert_eq!(parameter_name(0, 2, 2), "U-Component of Wind");
+    }
+
+    #[test]
+    fn test_parameter_name_v_wind() {
+        assert_eq!(parameter_name(0, 2, 3), "V-Component of Wind");
+    }
+
+    #[test]
+    fn test_parameter_name_total_precipitation() {
+        assert_eq!(parameter_name(0, 1, 8), "Total Precipitation");
+    }
+
+    #[test]
+    fn test_parameter_name_geopotential_height() {
+        assert_eq!(parameter_name(0, 3, 5), "Geopotential Height");
+    }
+
+    #[test]
+    fn test_parameter_name_specific_humidity() {
+        assert_eq!(parameter_name(0, 1, 0), "Specific Humidity");
+    }
+
+    #[test]
+    fn test_parameter_name_wind_speed() {
+        assert_eq!(parameter_name(0, 2, 1), "Wind Speed");
+    }
+
+    #[test]
+    fn test_parameter_name_ncep_local_categorical_rain() {
+        assert_eq!(parameter_name(0, 1, 192), "Categorical Rain (yes=1; no=0)");
+    }
+
+    #[test]
+    fn test_parameter_name_unknown() {
+        assert_eq!(parameter_name(255, 255, 255), "Unknown");
+    }
+
+    #[test]
+    fn test_parameter_name_unknown_within_known_category() {
+        // Use a number that's between known entries and the catch-all
+        assert_eq!(parameter_name(0, 0, 250), "Unknown");
+    }
+
+    // ---- parameter_units tests ----
+
+    #[test]
+    fn test_parameter_units_temperature_kelvin() {
+        assert_eq!(parameter_units(0, 0, 0), "K");
+    }
+
+    #[test]
+    fn test_parameter_units_relative_humidity_percent() {
+        assert_eq!(parameter_units(0, 1, 1), "%");
+    }
+
+    #[test]
+    fn test_parameter_units_wind_ms() {
+        assert_eq!(parameter_units(0, 2, 1), "m/s");
+    }
+
+    #[test]
+    fn test_parameter_units_precipitation_kgm2() {
+        assert_eq!(parameter_units(0, 1, 8), "kg/m\u{b2}");
+    }
+
+    #[test]
+    fn test_parameter_units_pressure_pa() {
+        assert_eq!(parameter_units(0, 3, 0), "Pa");
+    }
+
+    #[test]
+    fn test_parameter_units_geopotential_height() {
+        assert_eq!(parameter_units(0, 3, 5), "gpm");
+    }
+
+    #[test]
+    fn test_parameter_units_lapse_rate() {
+        assert_eq!(parameter_units(0, 0, 8), "K/m");
+    }
+
+    #[test]
+    fn test_parameter_units_heat_flux() {
+        assert_eq!(parameter_units(0, 0, 10), "W/m\u{b2}");
+    }
+
+    #[test]
+    fn test_parameter_units_unknown() {
+        assert_eq!(parameter_units(255, 255, 255), "?");
+    }
+
+    // ---- level_name tests ----
+
+    #[test]
+    fn test_level_name_surface() {
+        assert_eq!(level_name(1), "Ground or Water Surface");
+    }
+
+    #[test]
+    fn test_level_name_isobaric() {
+        assert_eq!(level_name(100), "Isobaric Surface");
+    }
+
+    #[test]
+    fn test_level_name_msl() {
+        assert_eq!(level_name(101), "Mean Sea Level");
+    }
+
+    #[test]
+    fn test_level_name_height_above_ground() {
+        assert_eq!(level_name(103), "Specified Height Level Above Ground");
+    }
+
+    #[test]
+    fn test_level_name_hybrid() {
+        assert_eq!(level_name(105), "Hybrid Level");
+    }
+
+    #[test]
+    fn test_level_name_entire_atmosphere() {
+        assert_eq!(level_name(200), "Entire Atmosphere (as single layer)");
+    }
+
+    #[test]
+    fn test_level_name_tropopause() {
+        assert_eq!(level_name(7), "Tropopause");
+    }
+
+    #[test]
+    fn test_level_name_pbl() {
+        assert_eq!(level_name(220), "Planetary Boundary Layer");
+    }
+
+    #[test]
+    fn test_level_name_cloud_ceiling() {
+        assert_eq!(level_name(215), "Cloud Ceiling");
+    }
+
+    #[test]
+    fn test_level_name_unknown() {
+        assert_eq!(level_name(199), "Unknown Level Type");
+    }
+
+    #[test]
+    fn test_level_name_unknown_high_value() {
+        assert_eq!(level_name(255), "Unknown Level Type");
+    }
+}

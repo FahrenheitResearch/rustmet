@@ -73,3 +73,51 @@ impl HrrrAkConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = HrrrAkConfig::aws_url("20260310", 12, "sfc", 6);
+        assert_eq!(
+            url,
+            "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260310/alaska/hrrr.t12z.wrfsfcf06.ak.grib2"
+        );
+    }
+
+    #[test]
+    fn test_aws_url_contains_alaska() {
+        let url = HrrrAkConfig::aws_url("20260310", 0, "prs", 0);
+        assert!(url.contains("/alaska/"));
+        assert!(url.contains(".ak.grib2"));
+    }
+
+    #[test]
+    fn test_nomads_url() {
+        let url = HrrrAkConfig::nomads_url("20260310", 6, "sfc", 12);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("/alaska/"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = HrrrAkConfig::idx_url("20260310", 0, "sfc", 0);
+        assert!(url.ends_with(".ak.grib2.idx"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(HrrrAkConfig::grid_nx(), 1299);
+        assert_eq!(HrrrAkConfig::grid_ny(), 919);
+        assert_eq!(HrrrAkConfig::grid_dx(), 3000.0);
+    }
+
+    #[test]
+    fn test_product_code_aliases() {
+        let url1 = HrrrAkConfig::aws_url("20260310", 0, "sfc", 0);
+        let url2 = HrrrAkConfig::aws_url("20260310", 0, "surface", 0);
+        assert_eq!(url1, url2);
+    }
+}

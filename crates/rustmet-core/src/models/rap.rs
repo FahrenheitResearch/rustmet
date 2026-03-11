@@ -59,3 +59,37 @@ impl RapConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nomads_url_format() {
+        let url = RapConfig::nomads_url("20260310", 15, 21);
+        assert_eq!(
+            url,
+            "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rap/prod/rap.20260310/rap.t15z.awp130pgrbf21.grib2"
+        );
+    }
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = RapConfig::aws_url("20260310", 3, 6);
+        assert!(url.starts_with("https://noaa-rap-pds.s3.amazonaws.com/"));
+        assert!(url.contains("rap.20260310"));
+        assert!(url.contains("t03z"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = RapConfig::idx_url("20260310", 0, 0);
+        assert!(url.ends_with(".grib2.idx"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(RapConfig::grid_nx(), 451);
+        assert_eq!(RapConfig::grid_ny(), 337);
+    }
+}

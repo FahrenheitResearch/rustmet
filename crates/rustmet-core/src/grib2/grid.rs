@@ -388,6 +388,211 @@ pub fn rotated_to_geographic(
     (lat_geo * rad2deg, lon_deg)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::parser::GridDefinition;
+
+    // ---- Template 0: Regular lat/lon grid ----
+
+    #[test]
+    fn test_latlon_grid_1x1() {
+        let grid = GridDefinition {
+            template: 0,
+            nx: 1,
+            ny: 1,
+            lat1: 45.0,
+            lon1: -90.0,
+            lat2: 45.0,
+            lon2: -90.0,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 1);
+        assert_eq!(lons.len(), 1);
+        assert!((lats[0] - 45.0).abs() < 1e-10);
+        assert!((lons[0] - (-90.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_latlon_grid_2x2() {
+        let grid = GridDefinition {
+            template: 0,
+            nx: 2,
+            ny: 2,
+            lat1: 0.0,
+            lon1: 0.0,
+            lat2: 10.0,
+            lon2: 10.0,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 4);
+        // Row 0: lat=0, Row 1: lat=10
+        assert!((lats[0] - 0.0).abs() < 1e-10);
+        assert!((lons[0] - 0.0).abs() < 1e-10);
+        assert!((lats[1] - 0.0).abs() < 1e-10);
+        assert!((lons[1] - 10.0).abs() < 1e-10);
+        assert!((lats[2] - 10.0).abs() < 1e-10);
+        assert!((lons[2] - 0.0).abs() < 1e-10);
+        assert!((lats[3] - 10.0).abs() < 1e-10);
+        assert!((lons[3] - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_latlon_grid_3x3_global() {
+        let grid = GridDefinition {
+            template: 0,
+            nx: 3,
+            ny: 3,
+            lat1: -90.0,
+            lon1: 0.0,
+            lat2: 90.0,
+            lon2: 360.0,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 9);
+        assert!((lats[0] - (-90.0)).abs() < 1e-10);
+        assert!((lats[3] - 0.0).abs() < 1e-10);
+        assert!((lats[6] - 90.0).abs() < 1e-10);
+        assert!((lons[0] - 0.0).abs() < 1e-10);
+        assert!((lons[1] - 180.0).abs() < 1e-10);
+        assert!((lons[2] - 360.0).abs() < 1e-10);
+    }
+
+    // ---- Template 30: Lambert Conformal ----
+
+    #[test]
+    fn test_lambert_grid_first_point() {
+        let grid = GridDefinition {
+            template: 30,
+            nx: 3,
+            ny: 3,
+            lat1: 21.138,
+            lon1: 237.28,
+            dx: 3000.0,
+            dy: 3000.0,
+            latin1: 38.5,
+            latin2: 38.5,
+            lov: 262.5,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 9);
+        assert!((lats[0] - 21.138).abs() < 0.01, "lat[0]={}", lats[0]);
+        assert!((lons[0] - 237.28).abs() < 0.01, "lon[0]={}", lons[0]);
+    }
+
+    // ---- Unknown template ----
+
+    #[test]
+    fn test_unknown_template_returns_empty() {
+        let grid = GridDefinition {
+            template: 999,
+            nx: 5,
+            ny: 5,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert!(lats.is_empty());
+        assert!(lons.is_empty());
+    }
+
+    // ---- rotated_to_geographic ----
+
+    #[test]
+    fn test_rotated_to_geographic_identity() {
+        // South pole at actual south pole => identity transform
+        let (lat, lon) = rotated_to_geographic(45.0, 90.0, -90.0, 0.0, 0.0);
+        assert!((lat - 45.0).abs() < 1e-6, "lat={}", lat);
+        assert!((lon - 90.0).abs() < 1e-6, "lon={}", lon);
+    }
+
+    #[test]
+    fn test_rotated_to_geographic_pole() {
+        let (lat, _lon) = rotated_to_geographic(90.0, 0.0, -90.0, 0.0, 0.0);
+        assert!((lat - 90.0).abs() < 1e-6, "lat={}", lat);
+    }
+
+    #[test]
+    fn test_rotated_to_geographic_equator() {
+        let (lat, lon) = rotated_to_geographic(0.0, 0.0, -90.0, 0.0, 0.0);
+        assert!((lat - 0.0).abs() < 1e-6, "lat={}", lat);
+        assert!((lon - 0.0).abs() < 1e-6, "lon={}", lon);
+    }
+
+    // ---- Gaussian grid (template 40) ----
+
+    #[test]
+    fn test_gaussian_grid_same_as_latlon() {
+        let grid = GridDefinition {
+            template: 40,
+            nx: 2,
+            ny: 2,
+            lat1: -10.0,
+            lon1: 0.0,
+            lat2: 10.0,
+            lon2: 20.0,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 4);
+        assert!((lats[0] - (-10.0)).abs() < 1e-10);
+        assert!((lats[2] - 10.0).abs() < 1e-10);
+        assert!((lons[0] - 0.0).abs() < 1e-10);
+        assert!((lons[1] - 20.0).abs() < 1e-10);
+    }
+
+    // ---- Polar stereographic (template 20) ----
+
+    #[test]
+    fn test_polar_stereo_grid_size() {
+        let grid = GridDefinition {
+            template: 20,
+            nx: 3,
+            ny: 3,
+            lat1: 60.0,
+            lon1: -120.0,
+            dx: 10000.0,
+            dy: 10000.0,
+            lov: -100.0,
+            lad: 60.0,
+            projection_center_flag: 0, // north pole
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 9);
+        assert_eq!(lons.len(), 9);
+        // All lats should be in a reasonable range for a north polar stereo
+        for &lat in &lats {
+            assert!(lat > 0.0 && lat <= 90.0, "unexpected lat={}", lat);
+        }
+    }
+
+    // ---- Mercator (template 10) ----
+
+    #[test]
+    fn test_mercator_grid_first_point() {
+        let grid = GridDefinition {
+            template: 10,
+            nx: 2,
+            ny: 2,
+            lat1: 20.0,
+            lon1: -100.0,
+            dx: 10000.0,
+            dy: 10000.0,
+            lad: 20.0,
+            ..Default::default()
+        };
+        let (lats, lons) = grid_latlon(&grid);
+        assert_eq!(lats.len(), 4);
+        // First point should be close to (20, -100)
+        assert!((lats[0] - 20.0).abs() < 0.01, "lat[0]={}", lats[0]);
+        assert!((lons[0] - (-100.0)).abs() < 0.01, "lon[0]={}", lons[0]);
+    }
+}
+
 /// Template 3.90: Space View Perspective (satellite imagery).
 ///
 /// Simplified inverse projection for geostationary satellite imagery.

@@ -72,3 +72,85 @@ impl HrrrConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = HrrrConfig::aws_url("20260310", 12, "sfc", 6);
+        assert_eq!(
+            url,
+            "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260310/conus/hrrr.t12z.wrfsfcf06.grib2"
+        );
+    }
+
+    #[test]
+    fn test_aws_url_pressure_product() {
+        let url = HrrrConfig::aws_url("20260310", 0, "prs", 18);
+        assert!(url.contains("wrfprs"));
+        assert!(url.contains("f18"));
+    }
+
+    #[test]
+    fn test_aws_url_native_product() {
+        let url = HrrrConfig::aws_url("20260310", 6, "nat", 3);
+        assert!(url.contains("wrfnat"));
+    }
+
+    #[test]
+    fn test_aws_url_subhourly_product() {
+        let url = HrrrConfig::aws_url("20260310", 18, "subh", 1);
+        assert!(url.contains("wrfsubh"));
+    }
+
+    #[test]
+    fn test_idx_url_appends_idx() {
+        let url = HrrrConfig::idx_url("20260310", 12, "sfc", 6);
+        assert!(url.ends_with(".grib2.idx"));
+    }
+
+    #[test]
+    fn test_nomads_url_format() {
+        let url = HrrrConfig::nomads_url("20260310", 0, "sfc", 0);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("hrrr.20260310"));
+        assert!(url.contains("conus"));
+    }
+
+    #[test]
+    fn test_product_code_aliases() {
+        let url1 = HrrrConfig::aws_url("20260310", 0, "sfc", 0);
+        let url2 = HrrrConfig::aws_url("20260310", 0, "surface", 0);
+        assert_eq!(url1, url2);
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(HrrrConfig::grid_nx(), 1799);
+        assert_eq!(HrrrConfig::grid_ny(), 1059);
+        assert_eq!(HrrrConfig::grid_dx(), 3000.0);
+        assert_eq!(HrrrConfig::grid_dy(), 3000.0);
+    }
+
+    #[test]
+    fn test_prs_var_format() {
+        assert_eq!(HrrrConfig::prs_var("TMP", 500), "TMP:500 mb");
+        assert_eq!(HrrrConfig::prs_var("HGT", 250), "HGT:250 mb");
+    }
+
+    #[test]
+    fn test_variable_patterns() {
+        assert_eq!(HrrrConfig::sfc_temp_2m(), "TMP:2 m above ground");
+        assert_eq!(HrrrConfig::composite_refl(), "REFC:entire atmosphere");
+        assert_eq!(HrrrConfig::sfc_mslp(), "MSLMA:mean sea level");
+    }
+
+    #[test]
+    fn test_hour_zero_padding() {
+        let url = HrrrConfig::aws_url("20260310", 3, "sfc", 1);
+        assert!(url.contains("t03z"));
+        assert!(url.contains("f01"));
+    }
+}

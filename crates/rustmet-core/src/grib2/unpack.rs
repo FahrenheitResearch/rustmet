@@ -749,3 +749,340 @@ fn unpack_spectral_complex(data: &[u8], dr: &DataRepresentation) -> Result<Vec<f
     values.extend(complex_values);
     Ok(values)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- BitReader tests ----
+
+    #[test]
+    fn test_bitreader_read_zero_bits() {
+        let data = [0xFF];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_bits(0), 0);
+        assert_eq!(reader.remaining_bits(), 8);
+    }
+
+    #[test]
+    fn test_bitreader_read_single_bit() {
+        let data = [0b1010_0000];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_bits(1), 1);
+        assert_eq!(reader.read_bits(1), 0);
+        assert_eq!(reader.read_bits(1), 1);
+        assert_eq!(reader.read_bits(1), 0);
+    }
+
+    #[test]
+    fn test_bitreader_read_full_byte() {
+        let data = [0xA5]; // 1010_0101
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_bits(8), 0xA5);
+    }
+
+    #[test]
+    fn test_bitreader_read_across_byte_boundary() {
+        let data = [0xFF, 0x00]; // 11111111 00000000
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_bits(4), 0xF); // 1111
+        assert_eq!(reader.read_bits(8), 0xF0); // 1111_0000
+        assert_eq!(reader.read_bits(4), 0x00); // 0000
+    }
+
+    #[test]
+    fn test_bitreader_read_16_bits() {
+        let data = [0xAB, 0xCD];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_bits(16), 0xABCD);
+    }
+
+    #[test]
+    fn test_bitreader_read_beyond_data() {
+        let data = [0xFF];
+        let mut reader = BitReader::new(&data);
+        // Reading past the end should pad with zeros
+        let val = reader.read_bits(16);
+        assert_eq!(val, 0xFF00);
+    }
+
+    #[test]
+    fn test_bitreader_remaining_bits() {
+        let data = [0xFF, 0x00];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.remaining_bits(), 16);
+        reader.read_bits(5);
+        assert_eq!(reader.remaining_bits(), 11);
+        reader.read_bits(11);
+        assert_eq!(reader.remaining_bits(), 0);
+    }
+
+    #[test]
+    fn test_bitreader_remaining_bits_empty() {
+        let data: [u8; 0] = [];
+        let reader = BitReader::new(&data);
+        assert_eq!(reader.remaining_bits(), 0);
+    }
+
+    #[test]
+    fn test_bitreader_align_to_byte() {
+        let data = [0xFF, 0xAA];
+        let mut reader = BitReader::new(&data);
+        reader.read_bits(3);
+        assert_eq!(reader.remaining_bits(), 13);
+        reader.align_to_byte();
+        assert_eq!(reader.remaining_bits(), 8);
+        assert_eq!(reader.read_bits(8), 0xAA);
+    }
+
+    #[test]
+    fn test_bitreader_align_already_aligned() {
+        let data = [0xFF, 0xAA];
+        let mut reader = BitReader::new(&data);
+        reader.read_bits(8);
+        reader.align_to_byte(); // already aligned, should be no-op
+        assert_eq!(reader.remaining_bits(), 8);
+    }
+
+    #[test]
+    fn test_bitreader_read_signed_zero_bits() {
+        let data = [0xFF];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_signed_bits(0), 0);
+    }
+
+    #[test]
+    fn test_bitreader_read_signed_one_bit() {
+        let data = [0xFF];
+        let mut reader = BitReader::new(&data);
+        // 1 bit: sign-magnitude with just sign bit returns 0
+        assert_eq!(reader.read_signed_bits(1), 0);
+    }
+
+    #[test]
+    fn test_bitreader_read_signed_positive() {
+        // 0_0000101 = +5 in 8-bit sign-magnitude
+        let data = [0b0_0000101];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_signed_bits(8), 5);
+    }
+
+    #[test]
+    fn test_bitreader_read_signed_negative() {
+        // 1_0000101 = -5 in 8-bit sign-magnitude
+        let data = [0b1_0000101];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_signed_bits(8), -5);
+    }
+
+    #[test]
+    fn test_bitreader_read_signed_negative_large() {
+        // 1_1111111 = -127 in 8-bit sign-magnitude
+        let data = [0xFF];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_signed_bits(8), -127);
+    }
+
+    #[test]
+    fn test_bitreader_read_signed_positive_zero() {
+        // 0_0000000 = +0
+        let data = [0x00];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_signed_bits(8), 0);
+    }
+
+    #[test]
+    fn test_bitreader_sequential_reads() {
+        // Test reading various bit widths sequentially
+        let data = [0b11010110, 0b10000000];
+        let mut reader = BitReader::new(&data);
+        assert_eq!(reader.read_bits(2), 0b11);   // 3
+        assert_eq!(reader.read_bits(3), 0b010);  // 2
+        assert_eq!(reader.read_bits(3), 0b110);  // 6
+        assert_eq!(reader.read_bits(1), 1);
+        assert_eq!(reader.remaining_bits(), 7);
+    }
+
+    // ---- apply_scaling tests ----
+
+    #[test]
+    fn test_apply_scaling_identity() {
+        let dr = DataRepresentation {
+            template: 0,
+            reference_value: 0.0,
+            binary_scale: 0,
+            decimal_scale: 0,
+            bits_per_value: 8,
+            ..make_default_dr()
+        };
+        let raw = vec![1, 2, 3, 4, 5];
+        let result = apply_scaling(&raw, &dr);
+        for (i, &v) in result.iter().enumerate() {
+            assert!((v - (i as f64 + 1.0)).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_apply_scaling_with_reference() {
+        let dr = DataRepresentation {
+            template: 0,
+            reference_value: 100.0,
+            binary_scale: 0,
+            decimal_scale: 0,
+            bits_per_value: 8,
+            ..make_default_dr()
+        };
+        let raw = vec![0, 1, 2];
+        let result = apply_scaling(&raw, &dr);
+        assert!((result[0] - 100.0).abs() < 1e-10);
+        assert!((result[1] - 101.0).abs() < 1e-10);
+        assert!((result[2] - 102.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_apply_scaling_with_binary_scale() {
+        let dr = DataRepresentation {
+            template: 0,
+            reference_value: 0.0,
+            binary_scale: 1, // multiply by 2
+            decimal_scale: 0,
+            bits_per_value: 8,
+            ..make_default_dr()
+        };
+        let raw = vec![1, 2, 3];
+        let result = apply_scaling(&raw, &dr);
+        assert!((result[0] - 2.0).abs() < 1e-10);
+        assert!((result[1] - 4.0).abs() < 1e-10);
+        assert!((result[2] - 6.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_apply_scaling_with_decimal_scale() {
+        let dr = DataRepresentation {
+            template: 0,
+            reference_value: 0.0,
+            binary_scale: 0,
+            decimal_scale: 1, // divide by 10
+            bits_per_value: 8,
+            ..make_default_dr()
+        };
+        let raw = vec![10, 20, 30];
+        let result = apply_scaling(&raw, &dr);
+        assert!((result[0] - 1.0).abs() < 1e-10);
+        assert!((result[1] - 2.0).abs() < 1e-10);
+        assert!((result[2] - 3.0).abs() < 1e-10);
+    }
+
+    // ---- unpack_simple tests ----
+
+    #[test]
+    fn test_unpack_simple_zero_bpv() {
+        let dr = DataRepresentation {
+            template: 0,
+            reference_value: 42.0,
+            binary_scale: 0,
+            decimal_scale: 0,
+            bits_per_value: 0,
+            ..make_default_dr()
+        };
+        let data = [0u8; 1];
+        let result = unpack_simple(&data, &dr).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!((result[0] - 42.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_unpack_simple_8bit() {
+        let dr = DataRepresentation {
+            template: 0,
+            reference_value: 0.0,
+            binary_scale: 0,
+            decimal_scale: 0,
+            bits_per_value: 8,
+            ..make_default_dr()
+        };
+        let data = [10, 20, 30];
+        let result = unpack_simple(&data, &dr).unwrap();
+        assert_eq!(result.len(), 3);
+        assert!((result[0] - 10.0).abs() < 1e-10);
+        assert!((result[1] - 20.0).abs() < 1e-10);
+        assert!((result[2] - 30.0).abs() < 1e-10);
+    }
+
+    // ---- unpack_ieee tests ----
+
+    #[test]
+    fn test_unpack_ieee_f32() {
+        let dr = DataRepresentation {
+            template: 4,
+            bits_per_value: 32,
+            ..make_default_dr()
+        };
+        let val: f32 = 3.14;
+        let bytes = val.to_be_bytes();
+        let result = unpack_ieee(&bytes, &dr).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!((result[0] - 3.14).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_unpack_ieee_f64() {
+        let dr = DataRepresentation {
+            template: 4,
+            bits_per_value: 64,
+            ..make_default_dr()
+        };
+        let val: f64 = 2.71828;
+        let bytes = val.to_be_bytes();
+        let result = unpack_ieee(&bytes, &dr).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!((result[0] - 2.71828).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_unpack_ieee_empty() {
+        let dr = DataRepresentation {
+            template: 4,
+            bits_per_value: 32,
+            ..make_default_dr()
+        };
+        let result = unpack_ieee(&[], &dr).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_unpack_ieee_unsupported_bpv() {
+        let dr = DataRepresentation {
+            template: 4,
+            bits_per_value: 16,
+            ..make_default_dr()
+        };
+        let data = [0u8; 4];
+        let result = unpack_ieee(&data, &dr);
+        assert!(result.is_err());
+    }
+
+    // Helper to create a default DataRepresentation for testing
+    fn make_default_dr() -> DataRepresentation {
+        DataRepresentation {
+            template: 0,
+            reference_value: 0.0,
+            binary_scale: 0,
+            decimal_scale: 0,
+            bits_per_value: 0,
+            group_splitting_method: 0,
+            num_groups: 0,
+            group_width_ref: 0,
+            group_width_bits: 0,
+            group_length_ref: 0,
+            group_length_inc: 0,
+            group_length_bits: 0,
+            last_group_length: 0,
+            spatial_diff_order: 0,
+            spatial_diff_bytes: 0,
+            ccsds_flags: 0,
+            ccsds_block_size: 0,
+            ccsds_rsi: 0,
+        }
+    }
+}

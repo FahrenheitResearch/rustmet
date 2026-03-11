@@ -79,3 +79,58 @@ impl Era5Config {
         format!("{}:{}", short_name, level_hpa)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = Era5Config::aws_url("2024", "03", "2m_temperature");
+        assert_eq!(
+            url,
+            "https://era5-pds.s3.amazonaws.com/2024/03/data/2m_temperature.nc"
+        );
+    }
+
+    #[test]
+    fn test_gcs_zarr_url() {
+        let url = Era5Config::gcs_zarr_url("single-level");
+        assert!(url.starts_with("gs://gcp-public-data-arco-era5/"));
+    }
+
+    #[test]
+    fn test_gcs_zarr_url_pressure() {
+        let url = Era5Config::gcs_zarr_url("pressure-level");
+        assert!(url.contains("zarr"));
+    }
+
+    #[test]
+    fn test_cds_api_url() {
+        let url = Era5Config::cds_api_url();
+        assert!(url.contains("cds.climate.copernicus.eu"));
+    }
+
+    #[test]
+    fn test_idx_url_returns_none() {
+        assert!(Era5Config::idx_url("2024", "03", "2m_temperature").is_none());
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(Era5Config::grid_nx(), 1440);
+        assert_eq!(Era5Config::grid_ny(), 721);
+        assert_eq!(Era5Config::grid_dx(), 0.25);
+    }
+
+    #[test]
+    fn test_variable_names() {
+        assert_eq!(Era5Config::var_temperature_2m(), "2m_temperature");
+        assert_eq!(Era5Config::var_mslp(), "mean_sea_level_pressure");
+    }
+
+    #[test]
+    fn test_prs_var() {
+        assert_eq!(Era5Config::prs_var("t", 500), "t:500");
+    }
+}

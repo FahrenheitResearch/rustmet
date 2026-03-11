@@ -63,3 +63,42 @@ impl RrfsConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nomads_url_prslev() {
+        let url = RrfsConfig::nomads_url("20260310", 12, "prslev", 24);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("rrfs.20260310"));
+        assert!(url.contains("prslev"));
+        assert!(url.contains(".f024."));
+    }
+
+    #[test]
+    fn test_nomads_url_natlev() {
+        let url = RrfsConfig::nomads_url("20260310", 0, "nat", 6);
+        assert!(url.contains("natlev"));
+    }
+
+    #[test]
+    fn test_nomads_url_default_product() {
+        let url = RrfsConfig::nomads_url("20260310", 0, "unknown", 0);
+        assert!(url.contains("prslev"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = RrfsConfig::idx_url("20260310", 0, "prslev", 0);
+        assert!(url.ends_with(".grib2.idx"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(RrfsConfig::grid_nx(), 1799);
+        assert_eq!(RrfsConfig::grid_ny(), 1059);
+        assert_eq!(RrfsConfig::grid_dx(), 3000.0);
+    }
+}

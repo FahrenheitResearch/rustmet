@@ -59,3 +59,41 @@ impl NamConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nomads_url_format() {
+        let url = NamConfig::nomads_url("20260310", 12, 36);
+        assert_eq!(
+            url,
+            "https://nomads.ncep.noaa.gov/pub/data/nccf/com/nam/prod/nam.20260310/nam.t12z.awphys36.tm00.grib2"
+        );
+    }
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = NamConfig::aws_url("20260310", 0, 0);
+        assert!(url.starts_with("https://noaa-nam-bdp-pds.s3.amazonaws.com/"));
+        assert!(url.contains("nam.20260310"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = NamConfig::idx_url("20260310", 6, 12);
+        assert!(url.ends_with(".grib2.idx"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(NamConfig::grid_nx(), 614);
+        assert_eq!(NamConfig::grid_ny(), 428);
+    }
+
+    #[test]
+    fn test_prs_var() {
+        assert_eq!(NamConfig::prs_var("UGRD", 300), "UGRD:300 mb");
+    }
+}

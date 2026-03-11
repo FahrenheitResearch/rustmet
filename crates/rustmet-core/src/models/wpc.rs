@@ -63,3 +63,52 @@ impl WpcConfig {
     pub fn precip_6hr() -> &'static str { "APCP:surface" }
     pub fn precip_total() -> &'static str { "APCP:surface" }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_url_6hr_qpf() {
+        let url = WpcConfig::url("20260310", 12, "6hr", 18);
+        assert!(url.starts_with("https://ftp.wpc.ncep.noaa.gov/"));
+        assert!(url.contains("p06m_"));
+        assert!(url.contains("2026031012"));
+    }
+
+    #[test]
+    fn test_url_day1() {
+        let url = WpcConfig::url("20260310", 0, "day1", 0);
+        assert!(url.contains("d1_tl_2026031012"));
+    }
+
+    #[test]
+    fn test_url_day2() {
+        let url = WpcConfig::url("20260310", 0, "day2", 0);
+        assert!(url.contains("d2_tl_"));
+    }
+
+    #[test]
+    fn test_url_day3() {
+        let url = WpcConfig::url("20260310", 0, "day3", 0);
+        assert!(url.contains("d3_tl_"));
+    }
+
+    #[test]
+    fn test_nomads_url() {
+        let url = WpcConfig::nomads_url("20260310", 0, 6);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("p06m_"));
+    }
+
+    #[test]
+    fn test_idx_url_returns_none() {
+        assert!(WpcConfig::idx_url("20260310", 0, "6hr", 6).is_none());
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(WpcConfig::grid_nx(), 2345);
+        assert_eq!(WpcConfig::grid_ny(), 1597);
+    }
+}

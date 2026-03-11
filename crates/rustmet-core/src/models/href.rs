@@ -73,3 +73,47 @@ impl HrefConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nomads_url_mean() {
+        let url = HrefConfig::nomads_url("20260310", 12, "mean", 24);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("href.20260310"));
+        assert!(url.contains(".mean."));
+    }
+
+    #[test]
+    fn test_nomads_url_pmmn() {
+        let url = HrefConfig::nomads_url("20260310", 0, "pmmn", 6);
+        assert!(url.contains(".pmmn."));
+    }
+
+    #[test]
+    fn test_aws_url() {
+        let url = HrefConfig::aws_url("20260310", 6, "mean", 12);
+        assert!(url.starts_with("https://noaa-href-pds.s3.amazonaws.com/"));
+        assert!(url.contains("href.20260310"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = HrefConfig::idx_url("20260310", 0, "mean", 1);
+        assert!(url.ends_with(".grib2.idx"));
+    }
+
+    #[test]
+    fn test_product_code_default_to_mean() {
+        let url = HrefConfig::nomads_url("20260310", 0, "unknown", 6);
+        assert!(url.contains(".mean."));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(HrefConfig::grid_nx(), 1799);
+        assert_eq!(HrefConfig::grid_ny(), 1059);
+    }
+}

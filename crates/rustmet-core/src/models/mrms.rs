@@ -87,3 +87,77 @@ impl MrmsConfig {
     pub fn product_vil() -> &'static str { "VIL" }
     pub fn product_echo_top_18() -> &'static str { "EchoTop_18" }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = MrmsConfig::aws_url("MergedReflectivityQCComposite", "00.50", "20260310-180000");
+        assert_eq!(
+            url,
+            "https://mrms-cp-pds.s3.amazonaws.com/MRMS_MergedReflectivityQCComposite_00.50_20260310-18000000.grib2.gz"
+        );
+    }
+
+    #[test]
+    fn test_composite_reflectivity_url() {
+        let url = MrmsConfig::composite_reflectivity_url("20260310-120000");
+        assert!(url.contains("MergedReflectivityQCComposite"));
+        assert!(url.contains("00.50"));
+        assert!(url.ends_with(".grib2.gz"));
+    }
+
+    #[test]
+    fn test_precip_rate_url() {
+        let url = MrmsConfig::precip_rate_url("20260310-120000");
+        assert!(url.contains("PrecipRate"));
+        assert!(url.contains("00.00"));
+    }
+
+    #[test]
+    fn test_qpe_01h_url() {
+        let url = MrmsConfig::qpe_01h_url("20260310-120000");
+        assert!(url.contains("RadarOnly_QPE_01H"));
+    }
+
+    #[test]
+    fn test_precip_flag_url() {
+        let url = MrmsConfig::precip_flag_url("20260310-120000");
+        assert!(url.contains("PrecipFlag"));
+    }
+
+    #[test]
+    fn test_idx_url_returns_none() {
+        assert!(MrmsConfig::idx_url("product", "level", "datetime").is_none());
+    }
+
+    #[test]
+    fn test_needs_decompress() {
+        assert!(MrmsConfig::needs_decompress("file.grib2.gz"));
+        assert!(!MrmsConfig::needs_decompress("file.grib2"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(MrmsConfig::grid_nx(), 7000);
+        assert_eq!(MrmsConfig::grid_ny(), 3500);
+        assert_eq!(MrmsConfig::grid_dx(), 0.01);
+    }
+
+    #[test]
+    fn test_domain_bounds() {
+        assert_eq!(MrmsConfig::lon_min(), -130.0);
+        assert_eq!(MrmsConfig::lon_max(), -60.0);
+        assert_eq!(MrmsConfig::lat_min(), 20.0);
+        assert_eq!(MrmsConfig::lat_max(), 55.0);
+    }
+
+    #[test]
+    fn test_product_names() {
+        assert_eq!(MrmsConfig::product_composite_refl(), "MergedReflectivityQCComposite");
+        assert_eq!(MrmsConfig::product_precip_rate(), "PrecipRate");
+        assert_eq!(MrmsConfig::product_qpe_01h(), "RadarOnly_QPE_01H");
+    }
+}

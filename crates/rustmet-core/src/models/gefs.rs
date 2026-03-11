@@ -138,3 +138,92 @@ impl GefsConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_control() {
+        let url = GefsConfig::aws_url("20260310", 0, "c00", "pgrb2a", 24);
+        assert!(url.starts_with("https://noaa-gefs-pds.s3.amazonaws.com/"));
+        assert!(url.contains("gefs.20260310"));
+        assert!(url.contains("gec00"));
+    }
+
+    #[test]
+    fn test_aws_url_perturbation() {
+        let url = GefsConfig::aws_url("20260310", 6, "p05", "pgrb2a", 48);
+        assert!(url.contains("gep05"));
+    }
+
+    #[test]
+    fn test_aws_url_mean() {
+        let url = GefsConfig::aws_url("20260310", 12, "mean", "pgrb2a", 12);
+        assert!(url.contains("geavg"));
+    }
+
+    #[test]
+    fn test_aws_url_spread() {
+        let url = GefsConfig::aws_url("20260310", 18, "spread", "pgrb2a", 6);
+        assert!(url.contains("gespr"));
+    }
+
+    #[test]
+    fn test_aws_url_numeric_member() {
+        let url = GefsConfig::aws_url("20260310", 0, "5", "pgrb2a", 0);
+        assert!(url.contains("gep05"));
+    }
+
+    #[test]
+    fn test_aws_url_numeric_member_zero() {
+        let url = GefsConfig::aws_url("20260310", 0, "0", "pgrb2a", 0);
+        assert!(url.contains("gec00"));
+    }
+
+    #[test]
+    fn test_nomads_url_control() {
+        let url = GefsConfig::nomads_url("20260310", 0, "c00", "pgrb2a", 24);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("gec00"));
+    }
+
+    #[test]
+    fn test_nomads_url_mean() {
+        let url = GefsConfig::nomads_url("20260310", 0, "mean", "pgrb2a", 12);
+        assert!(url.contains("geavg"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = GefsConfig::idx_url("20260310", 0, "c00", "pgrb2a", 0);
+        assert!(url.ends_with(".idx"));
+    }
+
+    #[test]
+    fn test_all_member_codes() {
+        let members = GefsConfig::all_member_codes();
+        assert_eq!(members.len(), 31);
+        assert_eq!(members[0], "c00");
+        assert_eq!(members[1], "p01");
+        assert_eq!(members[30], "p30");
+    }
+
+    #[test]
+    fn test_num_members() {
+        assert_eq!(GefsConfig::num_members(), 31);
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(GefsConfig::grid_nx(), 720);
+        assert_eq!(GefsConfig::grid_ny(), 361);
+        assert_eq!(GefsConfig::control_grid_nx(), 1440);
+    }
+
+    #[test]
+    fn test_product_code_secondary() {
+        let url = GefsConfig::aws_url("20260310", 0, "c00", "pgrb2b", 0);
+        assert!(url.contains("pgrb2b"));
+    }
+}

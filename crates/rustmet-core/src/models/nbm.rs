@@ -70,3 +70,49 @@ impl NbmConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_core() {
+        let url = NbmConfig::aws_url("20260310", 12, "core", 24);
+        assert!(url.starts_with("https://noaa-nbm-grib2-pds.s3.amazonaws.com/"));
+        assert!(url.contains("blend.20260310"));
+        assert!(url.contains("core"));
+        assert!(url.contains(".f024."));
+    }
+
+    #[test]
+    fn test_aws_url_qmd() {
+        let url = NbmConfig::aws_url("20260310", 6, "qmd", 12);
+        assert!(url.contains("qmd"));
+    }
+
+    #[test]
+    fn test_nomads_url() {
+        let url = NbmConfig::nomads_url("20260310", 0, "core", 48);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("blend.20260310"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = NbmConfig::idx_url("20260310", 0, "core", 0);
+        assert!(url.ends_with(".idx"));
+    }
+
+    #[test]
+    fn test_product_code_default() {
+        let url1 = NbmConfig::aws_url("20260310", 0, "core", 0);
+        let url2 = NbmConfig::aws_url("20260310", 0, "unknown", 0);
+        assert_eq!(url1, url2);
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(NbmConfig::grid_nx(), 2345);
+        assert_eq!(NbmConfig::grid_ny(), 1597);
+    }
+}

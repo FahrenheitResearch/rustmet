@@ -61,3 +61,47 @@ impl UrmaConfig {
     pub fn wind_speed() -> &'static str { "WIND:10 m above ground" }
     pub fn wind_direction() -> &'static str { "WDIR:10 m above ground" }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_analysis() {
+        let url = UrmaConfig::aws_url("20260310", 12, "2dvaranl");
+        assert!(url.starts_with("https://noaa-urma-pds.s3.amazonaws.com/"));
+        assert!(url.contains("urma2p5.20260310"));
+        assert!(url.contains("2dvaranl"));
+    }
+
+    #[test]
+    fn test_aws_url_guess() {
+        let url = UrmaConfig::aws_url("20260310", 0, "guess");
+        assert!(url.contains("2dvarges"));
+    }
+
+    #[test]
+    fn test_nomads_url() {
+        let url = UrmaConfig::nomads_url("20260310", 6, "2dvaranl");
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("urma2p5.20260310"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = UrmaConfig::idx_url("20260310", 0, "2dvaranl");
+        assert!(url.ends_with(".idx"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(UrmaConfig::grid_nx(), 2345);
+        assert_eq!(UrmaConfig::grid_ny(), 1597);
+    }
+
+    #[test]
+    fn test_product_code_default() {
+        let url = UrmaConfig::aws_url("20260310", 0, "unknown");
+        assert!(url.contains("2dvaranl"));
+    }
+}

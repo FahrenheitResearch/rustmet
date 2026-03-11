@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Pure Rust GRIB2 processor and weather model data library — HRRR, GFS, NAM, RAP"
 license = "MIT"
+repository = "https://github.com/FahrenheitResearch/rustmet"
+homepage = "https://github.com/FahrenheitResearch/rustmet"
+keywords = ["grib2", "weather", "meteorology", "nwp", "forecast"]
+categories = ["science", "parser-implementations"]
+authors = ["Fahrenheit Research"]
 
 [features]
 default = ["network", "jpeg2000"]

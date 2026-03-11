@@ -58,3 +58,56 @@ impl GfsConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = GfsConfig::aws_url("20260310", 6, 24);
+        assert_eq!(
+            url,
+            "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20260310/06/atmos/gfs.t06z.pgrb2.0p25.f024"
+        );
+    }
+
+    #[test]
+    fn test_aws_url_hour_zero() {
+        let url = GfsConfig::aws_url("20260310", 0, 0);
+        assert!(url.contains("/00/atmos/gfs.t00z"));
+        assert!(url.ends_with(".f000"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = GfsConfig::idx_url("20260310", 12, 48);
+        assert!(url.ends_with(".f048.idx"));
+    }
+
+    #[test]
+    fn test_nomads_url_format() {
+        let url = GfsConfig::nomads_url("20260310", 18, 384);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("gfs.20260310/18/atmos"));
+        assert!(url.ends_with(".f384"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(GfsConfig::grid_nx(), 1440);
+        assert_eq!(GfsConfig::grid_ny(), 721);
+        assert_eq!(GfsConfig::grid_dx(), 0.25);
+    }
+
+    #[test]
+    fn test_prs_var() {
+        assert_eq!(GfsConfig::prs_var("TMP", 850), "TMP:850 mb");
+    }
+
+    #[test]
+    fn test_variable_patterns() {
+        assert_eq!(GfsConfig::sfc_temp_2m(), "TMP:2 m above ground");
+        assert_eq!(GfsConfig::sfc_mslp(), "PRMSL:mean sea level");
+    }
+}

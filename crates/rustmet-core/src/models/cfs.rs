@@ -80,3 +80,47 @@ impl CfsConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nomads_url_format() {
+        let url = CfsConfig::nomads_url("20260310", 0, "pgbf", 24);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("cfs.20260310"));
+        assert!(url.contains("pgbf"));
+    }
+
+    #[test]
+    fn test_aws_url_format() {
+        let url = CfsConfig::aws_url("20260310", 6, "flxf", 48);
+        assert!(url.starts_with("https://noaa-cfs-pds.s3.amazonaws.com/"));
+        assert!(url.contains("flxf"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = CfsConfig::idx_url("20260310", 0, "pgbf", 6);
+        assert!(url.ends_with(".idx"));
+    }
+
+    #[test]
+    fn test_cfsr_url() {
+        let url = CfsConfig::cfsr_url("2020", "06");
+        assert!(url.contains("cfsr.202006"));
+    }
+
+    #[test]
+    fn test_product_code_default() {
+        let url = CfsConfig::nomads_url("20260310", 0, "unknown", 6);
+        assert!(url.contains("pgbf"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(CfsConfig::grid_nx(), 384);
+        assert_eq!(CfsConfig::grid_ny(), 190);
+    }
+}

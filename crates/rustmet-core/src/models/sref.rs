@@ -98,3 +98,61 @@ impl SrefConfig {
         format!("{}:{} mb", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nomads_url_member() {
+        let url = SrefConfig::nomads_url("20260310", 9, "arw_ctl", 24);
+        assert!(url.starts_with("https://nomads.ncep.noaa.gov/"));
+        assert!(url.contains("sref.20260310"));
+        assert!(url.contains("arw_ctl"));
+        assert!(url.contains(".f024."));
+    }
+
+    #[test]
+    fn test_nomads_url_mean() {
+        let url = SrefConfig::nomads_url("20260310", 3, "mean", 12);
+        assert!(url.contains(".mean."));
+    }
+
+    #[test]
+    fn test_ensprod_url_spread() {
+        let url = SrefConfig::ensprod_url("20260310", 9, "spread", 24);
+        assert!(url.contains(".spread."));
+    }
+
+    #[test]
+    fn test_ensprod_url_default_mean() {
+        let url = SrefConfig::ensprod_url("20260310", 9, "unknown", 12);
+        assert!(url.contains(".mean."));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = SrefConfig::idx_url("20260310", 3, "arw_ctl", 0);
+        assert!(url.ends_with(".grib2.idx"));
+    }
+
+    #[test]
+    fn test_arw_members() {
+        let members = SrefConfig::arw_members();
+        assert_eq!(members.len(), 15); // ctl + 7 positive + 7 negative
+        assert_eq!(members[0], "arw_ctl");
+    }
+
+    #[test]
+    fn test_nmb_members() {
+        let members = SrefConfig::nmb_members();
+        assert_eq!(members.len(), 15);
+        assert_eq!(members[0], "nmb_ctl");
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(SrefConfig::grid_nx(), 185);
+        assert_eq!(SrefConfig::grid_ny(), 129);
+    }
+}

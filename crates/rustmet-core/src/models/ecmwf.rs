@@ -57,3 +57,53 @@ impl EcmwfConfig {
         format!("{}:{}", var, level_mb)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_open_data_url_oper() {
+        let url = EcmwfConfig::open_data_url("20260310", 0, "oper", 24);
+        assert!(url.starts_with("https://data.ecmwf.int/forecasts/"));
+        assert!(url.contains("20260310"));
+        assert!(url.contains("oper"));
+    }
+
+    #[test]
+    fn test_open_data_url_ensemble() {
+        let url = EcmwfConfig::open_data_url("20260310", 12, "ens", 48);
+        assert!(url.contains("enfo"));
+    }
+
+    #[test]
+    fn test_idx_url() {
+        let url = EcmwfConfig::idx_url("20260310", 0, "oper", 6);
+        assert!(url.ends_with(".idx"));
+    }
+
+    #[test]
+    fn test_product_stream_default() {
+        // Unknown product should default to "oper"
+        let url = EcmwfConfig::open_data_url("20260310", 0, "hres", 6);
+        assert!(url.contains("oper"));
+    }
+
+    #[test]
+    fn test_grid_specs() {
+        assert_eq!(EcmwfConfig::grid_nx(), 1440);
+        assert_eq!(EcmwfConfig::grid_ny(), 721);
+        assert_eq!(EcmwfConfig::grid_dx(), 0.25);
+    }
+
+    #[test]
+    fn test_prs_var() {
+        assert_eq!(EcmwfConfig::prs_var("t", 500), "t:500");
+    }
+
+    #[test]
+    fn test_variable_patterns() {
+        assert_eq!(EcmwfConfig::sfc_temp_2m(), "2t:sfc");
+        assert_eq!(EcmwfConfig::sfc_mslp(), "msl:sfc");
+    }
+}

@@ -9,6 +9,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Pure Rust operational weather model processor and plotter — HRRR, GFS, NAM, RAP"
 license = "MIT"
+repository = "https://github.com/FahrenheitResearch/rustmet"
+homepage = "https://github.com/FahrenheitResearch/rustmet"
+keywords = ["grib2", "weather", "meteorology", "nwp", "forecast"]
+categories = ["science", "parser-implementations"]
+authors = ["Fahrenheit Research"]
 
 [dependencies]
 # Core library (GRIB2 parser, downloader, models)
@@ -37,6 +42,13 @@ path = "src/main.rs"
 [[bin]]
 name = "rustmet-bench"
 path = "benchmark/bench.rs"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "grib2_bench"
+harness = false
 
 [profile.release]
 opt-level = 3
