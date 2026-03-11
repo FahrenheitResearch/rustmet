@@ -24,10 +24,18 @@ HAS_RUSTMET = False
 HAS_CFGRIB = False
 HAS_METPY = False
 HAS_SCIPY = False
+RUSTMET_REQUIRED_ATTRS = (
+    "Grib2Writer",
+    "GribFile",
+    "potential_temperature_arr",
+    "mixratio_arr",
+    "thetae_arr",
+    "dewpoint_from_rh_arr",
+)
 
 try:
     import rustmet
-    HAS_RUSTMET = True
+    HAS_RUSTMET = all(hasattr(rustmet, attr) for attr in RUSTMET_REQUIRED_ATTRS)
 except ImportError:
     pass
 
@@ -83,6 +91,15 @@ def speedup_str(baseline, challenger):
         return f"{1.0 / ratio:.1f}x slower"
 
 
+def metpy_mixing_ratio_from_dewpoint(p_hpa, td_c):
+    """Compute mixing ratio from dewpoint across supported MetPy versions."""
+    p = p_hpa * units.hPa
+    td = td_c * units.degC
+    if hasattr(mpcalc, "mixing_ratio_from_dewpoint"):
+        return mpcalc.mixing_ratio_from_dewpoint(p, td)
+    return mpcalc.mixing_ratio(mpcalc.saturation_vapor_pressure(td), p) * 1000.0
+
+
 def print_header():
     print("=" * 78)
     print("rustmet Competitive Benchmark")
@@ -105,7 +122,7 @@ def print_header():
     print("  - Times are median of 5 rounds")
     print("  - MetPy uses pint units (adds overhead by design for unit safety)")
     print("  - cfgrib uses eccodes C library under the hood")
-    print("  - All rustmet operations use native Rust array processing (no Python loops)")
+    print("  - rustmet timings use the public Python API backed by the native extension")
     print("  - Grid operations (vorticity, smoothing) are fully vectorized in Rust")
     print()
 
@@ -140,8 +157,8 @@ def bench_grib2_parsing():
             level_value=2.0,
             grid_template=0,
             nx=nx, ny=ny,
-            lat1=30.0, lon1=-100.0,
-            lat2=39.99, lon2=-90.01,
+            lat1=39.99, lon1=-100.0,
+            lat2=30.0, lon2=-90.01,
             dx=0.1, dy=0.1,
             bits_per_value=16,
             reference_time="2026-01-15 12:00:00",
@@ -151,45 +168,49 @@ def bench_grib2_parsing():
     print()
 
     results = []
+    tmp = tempfile.NamedTemporaryFile(suffix=".grib2", delete=False)
+    tmp.write(grib_bytes)
+    tmp.close()
 
-    # rustmet: parse from bytes
-    t_rustmet = time_fn(lambda: rustmet.GribFile.from_bytes(grib_bytes),
-                        number=1000, repeat=5)
-    results.append(("GRIB2 parse (10 msgs, 100x100)", "rustmet", t_rustmet, None))
-    print(f"  rustmet GribFile.from_bytes:   {fmt_time(t_rustmet)}")
+    try:
+        # rustmet: file open (directly comparable to cfgrib)
+        t_rustmet_file = time_fn(lambda: rustmet.GribFile.open(tmp.name),
+                                 number=200, repeat=5)
+        results.append(("GRIB2 parse (file open, 10 msgs, 100x100)", "rustmet", t_rustmet_file, None))
+        print(f"  rustmet GribFile.open:         {fmt_time(t_rustmet_file)}")
 
-    # rustmet: parse + unpack all values
-    def rustmet_parse_unpack():
-        gf = rustmet.GribFile.from_bytes(grib_bytes)
-        for msg in gf.messages:
-            msg.values()
-    t_rustmet_full = time_fn(rustmet_parse_unpack, number=200, repeat=5)
-    results.append(("GRIB2 parse+unpack (10 msgs)", "rustmet", t_rustmet_full, None))
-    print(f"  rustmet parse + unpack all:    {fmt_time(t_rustmet_full)}")
+        # rustmet: in-memory bytes parse (reported separately)
+        t_rustmet_bytes = time_fn(lambda: rustmet.GribFile.from_bytes(grib_bytes),
+                                  number=1000, repeat=5)
+        results.append(("GRIB2 parse (from bytes, 10 msgs, 100x100)", "rustmet", t_rustmet_bytes, None))
+        print(f"  rustmet GribFile.from_bytes:   {fmt_time(t_rustmet_bytes)}")
 
-    # cfgrib: open from file
-    if HAS_CFGRIB:
-        tmp = tempfile.NamedTemporaryFile(suffix=".grib2", delete=False)
-        tmp.write(grib_bytes)
-        tmp.close()
-        try:
-            # Warm up / check if it works
+        # rustmet: parse + unpack all values
+        def rustmet_parse_unpack():
+            gf = rustmet.GribFile.from_bytes(grib_bytes)
+            for msg in gf.messages:
+                msg.values()
+        t_rustmet_full = time_fn(rustmet_parse_unpack, number=200, repeat=5)
+        results.append(("GRIB2 parse+unpack (10 msgs)", "rustmet", t_rustmet_full, None))
+        print(f"  rustmet parse + unpack all:    {fmt_time(t_rustmet_full)}")
+
+        if HAS_CFGRIB:
             try:
                 cfgrib.open_datasets(tmp.name)
                 t_cfgrib = time_fn(
                     lambda: cfgrib.open_datasets(tmp.name),
                     number=20, repeat=5
                 )
-                results.append(("GRIB2 parse (10 msgs, 100x100)", "cfgrib", t_cfgrib,
-                                speedup_str(t_cfgrib, t_rustmet)))
+                results.append(("GRIB2 parse (file open, 10 msgs, 100x100)", "cfgrib", t_cfgrib,
+                                speedup_str(t_cfgrib, t_rustmet_file)))
                 print(f"  cfgrib open_datasets:          {fmt_time(t_cfgrib)}")
-                print(f"  speedup (parse only):          {speedup_str(t_cfgrib, t_rustmet)}")
+                print(f"  speedup (file open):           {speedup_str(t_cfgrib, t_rustmet_file)}")
             except Exception as e:
                 print(f"  cfgrib: error ({e}), skipping")
-        finally:
-            os.unlink(tmp.name)
-    else:
-        print("  cfgrib: not installed, skipping")
+        else:
+            print("  cfgrib: not installed, skipping")
+    finally:
+        os.unlink(tmp.name)
 
     print()
     return results
@@ -217,16 +238,11 @@ def bench_met_calcs():
     dewpoint_c = temperature_c - np.random.uniform(0.5, 20.0, N)
     rh_pct = np.random.uniform(10.0, 100.0, N)
 
-    # Use native array functions if available, else fall back to np.vectorize
-    from rustmet._rustmet import (
-        potential_temperature_arr, mixratio_arr, thetae_arr, dewpoint_from_rh_arr,
-    )
-
     results = []
 
     # --- Potential Temperature ---
     print(f"  **Potential Temperature** (N={N:,})")
-    t_rm = time_fn(lambda: potential_temperature_arr(pressure_hpa, temperature_c),
+    t_rm = time_fn(lambda: rustmet.potential_temperature_arr(pressure_hpa, temperature_c),
                    number=100, repeat=5)
     print(f"    rustmet (native arr):  {fmt_time(t_rm)}")
     results.append(("potential_temperature", "rustmet", t_rm, None))
@@ -244,29 +260,27 @@ def bench_met_calcs():
                          speedup_str(t_mp, t_rm)))
     print()
 
-    # --- Mixing Ratio ---
-    print(f"  **Mixing Ratio** (N={N:,})")
-    t_rm = time_fn(lambda: mixratio_arr(pressure_hpa, temperature_c),
+    # --- Mixing Ratio from Dewpoint ---
+    print(f"  **Mixing Ratio from Dewpoint** (N={N:,})")
+    t_rm = time_fn(lambda: rustmet.mixratio_arr(pressure_hpa, dewpoint_c),
                    number=100, repeat=5)
     print(f"    rustmet (native arr):  {fmt_time(t_rm)}")
-    results.append(("mixing_ratio", "rustmet", t_rm, None))
+    results.append(("mixing_ratio_from_dewpoint", "rustmet", t_rm, None))
 
     if HAS_METPY:
-        p_mp = pressure_hpa * units.hPa
-        td_mp = dewpoint_c * units.degC
         t_mp = time_fn(
-            lambda: mpcalc.mixing_ratio_from_relative_humidity(p_mp, temperature_c * units.degC, rh_pct / 100.0),
+            lambda: metpy_mixing_ratio_from_dewpoint(pressure_hpa, dewpoint_c),
             number=100, repeat=5
         )
         print(f"    MetPy (pint units):    {fmt_time(t_mp)}")
         print(f"    speedup:               {speedup_str(t_mp, t_rm)}")
-        results.append(("mixing_ratio", "MetPy", t_mp,
+        results.append(("mixing_ratio_from_dewpoint", "MetPy", t_mp,
                          speedup_str(t_mp, t_rm)))
     print()
 
     # --- Equivalent Potential Temperature ---
     print(f"  **Equivalent Potential Temperature** (N={N:,})")
-    t_rm = time_fn(lambda: thetae_arr(pressure_hpa, temperature_c, dewpoint_c),
+    t_rm = time_fn(lambda: rustmet.thetae_arr(pressure_hpa, temperature_c, dewpoint_c),
                    number=100, repeat=5)
     print(f"    rustmet (native arr):  {fmt_time(t_rm)}")
     results.append(("equiv_potential_temp", "rustmet", t_rm, None))
@@ -287,7 +301,7 @@ def bench_met_calcs():
 
     # --- Dewpoint from RH ---
     print(f"  **Dewpoint from RH** (N={N:,})")
-    t_rm = time_fn(lambda: dewpoint_from_rh_arr(temperature_c, rh_pct),
+    t_rm = time_fn(lambda: rustmet.dewpoint_from_rh_arr(temperature_c, rh_pct),
                    number=100, repeat=5)
     print(f"    rustmet (native arr):  {fmt_time(t_rm)}")
     results.append(("dewpoint_from_rh", "rustmet", t_rm, None))
@@ -453,7 +467,9 @@ def print_summary(all_results):
     print("  - MetPy comparisons: MetPy's pint unit system adds overhead by")
     print("    design for unit safety. Raw numpy equivalents would be faster.")
     print("  - Met functions: rustmet uses native Rust array processing via PyO3+numpy.")
-    print("  - Grid operations: fully vectorized in Rust, fair apples-to-apples.")
+    print("  - GRIB parsing compares rustmet file-open with cfgrib file-open.")
+    print("  - Grid operations are fully vectorized in Rust and compared to")
+    print("    vectorized numpy/scipy baselines.")
     print()
     print("*Run `python benchmark/compare.py` to reproduce on your system.*")
     print()

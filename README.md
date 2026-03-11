@@ -3,7 +3,7 @@
 [![CI](https://github.com/FahrenheitResearch/rustmet/actions/workflows/ci.yml/badge.svg)](https://github.com/FahrenheitResearch/rustmet/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Pure Rust GRIB2 processor -- 5x faster than cfgrib.**
+**Pure Rust GRIB2 processor for operational weather data.**
 
 rustmet downloads and decodes GRIB2 data from operational weather models using pure Rust. It ships with Python bindings via PyO3, so you can drop it into any existing Python forecasting pipeline.
 
@@ -71,7 +71,7 @@ Downloading and decoding 8 HRRR surface variables (15M grid points), median of 5
 | herbie + cfgrib | 8.1 s | 0.75 s | 8.9 s |
 | xarray + cfgrib | -- | 0.39 s | -- |
 
-rustmet is **5x faster end-to-end** than the standard Python stack. The download speedup comes from HTTP range requests with connection pooling; the decode speedup comes from a zero-copy Rust GRIB2 parser with JPEG2000 and deflate decompression.
+In the end-to-end example above, rustmet reduces wall time by combining HTTP range requests with Rust-native decoding. The exact speedup depends on the data source, workload, and comparison stack.
 
 ### Competitive comparison
 
@@ -81,7 +81,7 @@ We also benchmark rustmet against cfgrib, MetPy, and scipy on equivalent operati
 python benchmark/compare.py
 ```
 
-The script handles missing libraries gracefully and prints a formatted table. MetPy's pint-based unit system adds overhead compared to raw numpy -- this is a deliberate design choice for dimensional safety, not a deficiency. See [benchmark/RESULTS.md](benchmark/RESULTS.md) for detailed Criterion results and comparative numbers.
+The script handles missing libraries gracefully and prints a formatted table. MetPy's pint-based unit system adds overhead compared to raw numpy -- this is a deliberate design choice for dimensional safety, not a deficiency. See [benchmark/RESULTS.md](benchmark/RESULTS.md) for methodology notes and Rust-side Criterion results.
 
 ## Supported Models
 

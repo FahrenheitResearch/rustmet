@@ -53,32 +53,20 @@ Platform: Windows 11, release profile (opt-level=3, LTO, codegen-units=1)
 
 Run `python benchmark/compare.py` to generate live numbers on your system.
 
-The comparison script benchmarks equivalent operations across libraries:
+The comparison script benchmarks comparable operations across libraries:
 
-**GRIB2 Parsing** — rustmet `GribFile.from_bytes` vs cfgrib `open_datasets`
-- Creates a 50x50 test GRIB2 file with `Grib2Writer`, then parses it with both libraries
-- cfgrib uses the eccodes C library; rustmet uses a pure Rust zero-copy parser
+**GRIB2 Parsing**
+- rustmet `GribFile.open(...)` and cfgrib `open_datasets(...)` both parse the same temporary GRIB2 file from disk.
+- rustmet `GribFile.from_bytes(...)` is reported separately as an in-memory parsing measurement.
 
-**Meteorological Calculations** — rustmet vs MetPy (10,000 elements)
-- Potential temperature, mixing ratio, equivalent potential temperature, dewpoint from RH
-- Note: MetPy wraps all arrays in pint units for dimensional safety, which adds per-call
-  overhead. This is a deliberate design choice, not a deficiency. If your workflow already
-  uses pint, MetPy's overhead is part of normal operation.
+**Meteorological Calculations** (10,000 elements)
+- Potential temperature, mixing ratio from dewpoint, equivalent potential temperature, dewpoint from RH
+- Note: MetPy wraps arrays in pint units for dimensional safety, which adds per-call
+  overhead. This is a deliberate design choice, not a deficiency.
 
-**Grid Operations** — rustmet vs numpy/scipy (200x200 grid)
+**Grid Operations** (200x200 grid)
 - Vorticity: rustmet's finite-difference stencil vs `np.gradient`
 - Gaussian smooth: rustmet `smooth()` vs `scipy.ndimage.gaussian_filter`
 
-### Sample Results (placeholder — run compare.py for your system)
-
-| Operation | rustmet | Competitor | Speedup |
-|-----------|---------|------------|---------|
-| GRIB2 parse (50x50) | ~20 us | cfgrib: ~5 ms | ~250x faster |
-| potential_temperature (10k) | ~5 ms | MetPy: ~15 ms | ~3x faster |
-| equiv_pot_temp (10k) | ~12 ms | MetPy: ~40 ms | ~3x faster |
-| dewpoint_from_rh (10k) | ~4 ms | MetPy: ~12 ms | ~3x faster |
-| vorticity (200x200) | ~80 us | numpy: ~1 ms | ~12x faster |
-| gaussian smooth s=2 (200x200) | ~700 us | scipy: ~300 us | ~0.4x (scipy faster) |
-
-*These are rough placeholder numbers. Actual results depend on hardware, Python version,
-and library versions. Run the script for accurate measurements.*
+No checked-in cross-library speedup table is provided here. Run `python benchmark/compare.py`
+on your own environment for current local numbers.

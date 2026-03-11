@@ -8,7 +8,7 @@ pub mod writer;
 pub mod ops;
 
 pub use parser::{Grib2File, Grib2Message, GridDefinition, ProductDefinition, DataRepresentation};
-pub use unpack::{unpack_message, BitReader};
+pub use unpack::{unpack_message, unpack_message_normalized, flip_rows, BitReader};
 pub use grid::{grid_latlon, rotated_to_geographic};
 pub use tables::{parameter_name, parameter_units, level_name};
 pub use search::search_messages;

@@ -147,6 +147,7 @@ pub fn absolute_vorticity(
     nx: usize, ny: usize, dx: f64, dy: f64,
 ) -> Vec<f64> {
     let rel = vorticity(u, v, nx, ny, dx, dy);
+    assert_eq!(lats.len(), nx * ny);
     rel.iter()
         .zip(lats.iter())
         .map(|(zeta, lat)| zeta + coriolis_parameter(*lat))
@@ -691,6 +692,17 @@ mod tests {
         // At pole: f = 2Ω
         let f_pole = coriolis_parameter(90.0);
         assert!((f_pole - 2.0 * OMEGA).abs() < 1e-12);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_absolute_vorticity_lat_mismatch_panics() {
+        let nx = 2;
+        let ny = 2;
+        let u = vec![0.0; nx * ny];
+        let v = vec![0.0; nx * ny];
+        let lats = vec![35.0; 3];
+        let _ = absolute_vorticity(&u, &v, &lats, nx, ny, 1.0, 1.0);
     }
 
     #[test]

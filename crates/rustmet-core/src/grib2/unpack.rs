@@ -12,16 +12,42 @@ impl<'a> BitReader<'a> {
     }
 
     /// Read `n` bits as an unsigned integer (up to 64 bits).
+    ///
+    /// Optimized to read whole bytes at a time when possible, falling back
+    /// to bit-by-bit only for partial-byte boundaries.
     pub fn read_bits(&mut self, n: usize) -> u64 {
         if n == 0 {
             return 0;
         }
+
+        let byte_offset = self.bit_pos / 8;
+        let bit_offset = self.bit_pos % 8;
+
+        // Fast path: all bits fit within available bytes and n <= 56
+        // We can grab up to 8 bytes from the data, shift and mask.
+        if n <= 56 && byte_offset + (bit_offset + n + 7) / 8 <= self.data.len() {
+            // Read up to 8 bytes starting at byte_offset into a u64 (big-endian)
+            let bytes_needed = (bit_offset + n + 7) / 8;
+            let mut raw: u64 = 0;
+            for i in 0..bytes_needed {
+                raw = (raw << 8) | self.data[byte_offset + i] as u64;
+            }
+            // The bits we want start at bit_offset from the MSB of the first byte
+            // and we read `bytes_needed * 8` bits total. We need bits
+            // [bit_offset .. bit_offset + n] counting from the MSB.
+            let shift = bytes_needed * 8 - bit_offset - n;
+            let mask = (1u64 << n) - 1;
+            self.bit_pos += n;
+            return (raw >> shift) & mask;
+        }
+
+        // Slow path: bit-by-bit (for edge cases or very large reads)
         let mut result: u64 = 0;
         for _ in 0..n {
-            let byte_idx = self.bit_pos / 8;
+            let bi = self.bit_pos / 8;
             let bit_idx = 7 - (self.bit_pos % 8);
-            if byte_idx < self.data.len() {
-                result = (result << 1) | ((self.data[byte_idx] >> bit_idx) as u64 & 1);
+            if bi < self.data.len() {
+                result = (result << 1) | ((self.data[bi] >> bit_idx) as u64 & 1);
             } else {
                 result <<= 1;
             }
@@ -111,24 +137,43 @@ pub fn unpack_message(msg: &Grib2Message) -> crate::error::Result<Vec<f64>> {
         values
     };
 
-    // Apply scan mode orientation correction.
-    // HRRR typically has scan_mode 0x40 (bit 6 set) meaning +j direction (south-to-north).
-    // We normalize to north-to-south (top-down) row order for rendering.
-    let scan_mode = msg.grid.scan_mode;
-    let nx = msg.grid.nx as usize;
-    let ny = msg.grid.ny as usize;
-    if nx > 0 && ny > 0 && values.len() == nx * ny {
-        // Bit 6 (0x40): j-direction positive = south-to-north → flip rows
-        if scan_mode & 0x40 != 0 {
-            for j in 0..ny / 2 {
-                let j_rev = ny - 1 - j;
-                for i in 0..nx {
-                    values.swap(j * nx + i, j_rev * nx + i);
-                }
-            }
-        }
-    }
+    // Preserve original scan order by default (matches ecCodes behavior).
+    // Users who need north-to-south (top-down) row order for rendering
+    // should call `flip_scan_order()` on the values.
 
+    Ok(values)
+}
+
+/// Flip rows of a 2D field to convert between scan orders.
+///
+/// GRIB2 scan_mode bit 6 (0x40) indicates +j direction (south-to-north).
+/// This function reverses the row order, converting south-to-north to
+/// north-to-south (top-down) or vice versa.
+///
+/// Call this after `unpack_message` if you need north-to-south order
+/// for rendering/display and the message has `scan_mode & 0x40 != 0`.
+pub fn flip_rows(values: &mut [f64], nx: usize, ny: usize) {
+    if nx == 0 || ny == 0 || values.len() != nx * ny {
+        return;
+    }
+    for j in 0..ny / 2 {
+        let j_rev = ny - 1 - j;
+        let (top, bot) = values.split_at_mut(j_rev * nx);
+        let top_row = &mut top[j * nx..j * nx + nx];
+        let bot_row = &mut bot[..nx];
+        top_row.swap_with_slice(bot_row);
+    }
+}
+
+/// Unpack a message and normalize to north-to-south row order.
+///
+/// This is a convenience that calls `unpack_message` then `flip_rows`
+/// if scan_mode bit 6 is set. Useful for rendering pipelines.
+pub fn unpack_message_normalized(msg: &Grib2Message) -> crate::error::Result<Vec<f64>> {
+    let mut values = unpack_message(msg)?;
+    if msg.grid.scan_mode & 0x40 != 0 {
+        flip_rows(&mut values, msg.grid.nx as usize, msg.grid.ny as usize);
+    }
     Ok(values)
 }
 

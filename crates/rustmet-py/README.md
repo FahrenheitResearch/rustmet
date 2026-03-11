@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/rustmet.svg)](https://pypi.org/project/rustmet/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/FahrenheitResearch/rustmet/blob/main/LICENSE)
 
-Fast GRIB2 processor for weather models -- pure Rust with Python bindings, 5x faster than cfgrib.
+Fast GRIB2 processor for weather models with pure Rust Python bindings.
 
 No system dependencies required. No eccodes, no libgrib. Just `pip install rustmet`.
 

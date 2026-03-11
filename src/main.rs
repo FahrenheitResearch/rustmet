@@ -765,8 +765,8 @@ fn render_grib_product(
         let v_msg = find_msg_by_var(grib, gprod.grib_vars[1])
             .ok_or_else(|| format!("GRIB message not found for '{}'", gprod.grib_vars[1]))?;
 
-        let u_vals = grib2::unpack_message(u_msg).map_err(|e| e.to_string())?;
-        let v_vals = grib2::unpack_message(v_msg).map_err(|e| e.to_string())?;
+        let u_vals = grib2::unpack_message_normalized(u_msg).map_err(|e| e.to_string())?;
+        let v_vals = grib2::unpack_message_normalized(v_msg).map_err(|e| e.to_string())?;
 
         // Truncate to expected grid size if needed (spatial differencing artifacts)
         let expected = nx * ny;
@@ -790,7 +790,7 @@ fn render_grib_product(
         // Single-variable product
         let msg = find_msg_by_var(grib, gprod.grib_vars[0])
             .ok_or_else(|| format!("GRIB message not found for '{}'", gprod.grib_vars[0]))?;
-        let raw_values = grib2::unpack_message(msg).map_err(|e| e.to_string())?;
+        let raw_values = grib2::unpack_message_normalized(msg).map_err(|e| e.to_string())?;
 
         // Unit conversion
         let converted = convert_values(&raw_values, gprod.name, gprod.units);

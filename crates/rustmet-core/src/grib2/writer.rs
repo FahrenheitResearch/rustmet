@@ -93,6 +93,7 @@ impl MessageBuilder {
 
     /// Set a bitmap (true = value present, false = missing).
     /// When a bitmap is used, only values where `bitmap[i] == true` are packed.
+    /// The bitmap length must match the values length.
     pub fn bitmap(mut self, bitmap: Vec<bool>) -> Self {
         self.bitmap = Some(bitmap);
         self
@@ -155,25 +156,23 @@ impl Default for Grib2Writer {
 fn encode_message(msg: &MessageBuilder) -> Result<Vec<u8>, String> {
     // We build sections 1, 3, 4, 5, 6, 7 first, then prepend section 0
     // and append section 8, computing total length.
+    let total_points = msg.grid.nx as usize * msg.grid.ny as usize;
+    if total_points != msg.values.len() {
+        return Err(format!(
+            "Grid expects {} points ({}x{}), but values has {} elements",
+            total_points, msg.grid.nx, msg.grid.ny, msg.values.len()
+        ));
+    }
 
     let sec1 = encode_section1(msg);
     let sec3 = encode_section3(&msg.grid)?;
     let sec4 = encode_section4(&msg.product);
 
-    // Determine which values to pack (apply bitmap filtering)
-    let pack_values: Vec<f64> = if let Some(ref bm) = msg.bitmap {
-        msg.values
-            .iter()
-            .zip(bm.iter())
-            .filter_map(|(&v, &present)| if present { Some(v) } else { None })
-            .collect()
-    } else {
-        // Filter out NaNs — they become bitmap-masked
-        msg.values.clone()
-    };
+    // Determine which values to pack and which bitmap to emit.
+    let (bitmap, pack_values) = prepare_bitmap_and_values(msg)?;
 
     let (sec5, sec7) = encode_data(&pack_values, &msg.packing)?;
-    let sec6 = encode_section6(&msg.bitmap, msg.values.len());
+    let sec6 = encode_section6(&bitmap, total_points);
 
     // Total length = sec0(16) + sec1 + sec3 + sec4 + sec5 + sec6 + sec7 + sec8(4)
     let total_length: u64 = 16
@@ -208,6 +207,49 @@ fn encode_message(msg: &MessageBuilder) -> Result<Vec<u8>, String> {
     debug_assert_eq!(out.len() as u64, total_length);
 
     Ok(out)
+}
+
+fn prepare_bitmap_and_values(msg: &MessageBuilder) -> Result<(Option<Vec<bool>>, Vec<f64>), String> {
+    match &msg.bitmap {
+        Some(bitmap) => {
+            if bitmap.len() != msg.values.len() {
+                return Err(format!(
+                    "Bitmap length {} does not match values length {}",
+                    bitmap.len(),
+                    msg.values.len()
+                ));
+            }
+
+            let mut pack_values = Vec::with_capacity(bitmap.iter().filter(|&&present| present).count());
+            for (idx, (&value, &present)) in msg.values.iter().zip(bitmap.iter()).enumerate() {
+                if present {
+                    if !value.is_finite() {
+                        return Err(format!(
+                            "Non-finite value at index {} is marked present in the bitmap",
+                            idx
+                        ));
+                    }
+                    pack_values.push(value);
+                }
+            }
+
+            Ok((Some(bitmap.clone()), pack_values))
+        }
+        None => {
+            if msg.values.iter().all(|v| v.is_finite()) {
+                Ok((None, msg.values.clone()))
+            } else {
+                let bitmap: Vec<bool> = msg.values.iter().map(|v| v.is_finite()).collect();
+                let pack_values = msg
+                    .values
+                    .iter()
+                    .copied()
+                    .filter(|v| v.is_finite())
+                    .collect();
+                Ok((Some(bitmap), pack_values))
+            }
+        }
+    }
 }
 
 /// Section 1: Identification Section.
@@ -930,6 +972,79 @@ mod tests {
         for i in 9..unpacked.len() {
             assert!(unpacked[i].is_nan(), "Padding bit {} should be NaN", i);
         }
+    }
+
+    #[test]
+    fn roundtrip_nonfinite_values_auto_bitmap() {
+        let values = vec![1.0, f64::NAN, 3.0, f64::INFINITY];
+        let grid = GridDefinition {
+            template: 0,
+            nx: 2,
+            ny: 2,
+            lat1: 0.0,
+            lon1: 0.0,
+            lat2: 1.0,
+            lon2: 1.0,
+            dx: 1.0,
+            dy: 1.0,
+            scan_mode: 0,
+            ..GridDefinition::default()
+        };
+
+        let writer = Grib2Writer::new().add_message(
+            MessageBuilder::new(0, values)
+                .grid(grid)
+                .packing(PackingMethod::Simple { bits_per_value: 16 }),
+        );
+
+        let bytes = writer.to_bytes().unwrap();
+        let grib = Grib2File::from_bytes(&bytes).unwrap();
+        let msg = &grib.messages[0];
+        assert!(msg.bitmap.is_some(), "non-finite values should create a bitmap");
+
+        let unpacked = unpack_message(msg).unwrap();
+        assert!((unpacked[0] - 1.0).abs() < 0.01);
+        assert!(unpacked[1].is_nan());
+        assert!((unpacked[2] - 3.0).abs() < 0.01);
+        assert!(unpacked[3].is_nan());
+    }
+
+    #[test]
+    fn bitmap_length_mismatch_is_error() {
+        let grid = GridDefinition {
+            template: 0,
+            nx: 2,
+            ny: 2,
+            ..GridDefinition::default()
+        };
+
+        let writer = Grib2Writer::new().add_message(
+            MessageBuilder::new(0, vec![1.0, 2.0, 3.0, 4.0])
+                .grid(grid)
+                .bitmap(vec![true, false, true]),
+        );
+
+        let err = writer.to_bytes().unwrap_err();
+        assert!(err.contains("Bitmap length 3 does not match values length 4"));
+    }
+
+    #[test]
+    fn bitmap_present_nonfinite_value_is_error() {
+        let grid = GridDefinition {
+            template: 0,
+            nx: 2,
+            ny: 2,
+            ..GridDefinition::default()
+        };
+
+        let writer = Grib2Writer::new().add_message(
+            MessageBuilder::new(0, vec![1.0, f64::NAN, 3.0, 4.0])
+                .grid(grid)
+                .bitmap(vec![true, true, true, true]),
+        );
+
+        let err = writer.to_bytes().unwrap_err();
+        assert!(err.contains("Non-finite value at index 1 is marked present"));
     }
 
     #[test]

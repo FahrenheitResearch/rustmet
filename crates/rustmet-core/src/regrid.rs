@@ -731,6 +731,7 @@ pub fn interpolate_points(
     target_lons: &[f64],
     method: InterpMethod,
 ) -> Vec<f64> {
+    assert_eq!(target_lats.len(), target_lons.len());
     target_lats
         .iter()
         .zip(target_lons.iter())
@@ -1090,6 +1091,27 @@ mod tests {
 
         let v = interpolate_point(&values, &lats, &lons, nx, ny, 0.5, 0.5, InterpMethod::Bilinear);
         assert!(v.is_nan(), "expected NaN when source has NaN, got {}", v);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_interpolate_points_target_length_mismatch_panics() {
+        let nx = 5;
+        let ny = 5;
+        let lats: Vec<f64> = (0..ny).map(|j| 30.0 + j as f64).collect();
+        let lons: Vec<f64> = (0..nx).map(|i| -100.0 + i as f64).collect();
+        let values: Vec<f64> = vec![1.0; nx * ny];
+
+        let _ = interpolate_points(
+            &values,
+            &lats,
+            &lons,
+            nx,
+            ny,
+            &[31.0, 32.0],
+            &[-99.0],
+            InterpMethod::Bilinear,
+        );
     }
 
     #[test]

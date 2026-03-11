@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "rustmet"
 version = "0.1.0"
-description = "Fast GRIB2 processor for weather models — pure Rust, 5x faster than cfgrib"
+description = "Fast GRIB2 processor for weather models with pure Rust bindings"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }

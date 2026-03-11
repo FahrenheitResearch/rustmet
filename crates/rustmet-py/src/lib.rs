@@ -2041,8 +2041,22 @@ fn absolute_vorticity<'py>(
     lats: PyReadonlyArray1<f64>,
     nx: usize, ny: usize, dx: f64, dy: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let u = u.as_slice()?;
+    let v = v.as_slice()?;
+    let lats = lats.as_slice()?;
+    ensure_equal_lengths(&[
+        ("u", u.len()),
+        ("v", v.len()),
+        ("lats", lats.len()),
+    ])?;
+    if u.len() != nx * ny {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "u/v/lats must each have nx*ny={} elements",
+            nx * ny
+        )));
+    }
     let result = dynamics::absolute_vorticity(
-        u.as_slice()?, v.as_slice()?, lats.as_slice()?,
+        u, v, lats,
         nx, ny, dx, dy,
     );
     Ok(PyArray1::from_vec(py, result))
@@ -2954,6 +2968,22 @@ fn second_derivative<'py>(
 // Vectorized meteorological functions (array → array)
 // ------------------------------------------------------
 
+fn ensure_equal_lengths(lengths: &[(&str, usize)]) -> PyResult<()> {
+    if let Some((expected_name, expected_len)) = lengths.first().copied() {
+        for (name, len) in lengths.iter().copied().skip(1) {
+            if len != expected_len {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    format!(
+                        "{} has length {}, but {} has length {}",
+                        name, len, expected_name, expected_len
+                    )
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Potential temperature for arrays. p in hPa, t in Celsius. Returns array of K.
 #[pyfunction]
 fn potential_temperature_arr<'py>(
@@ -2962,6 +2992,7 @@ fn potential_temperature_arr<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let p = p_hpa.as_slice()?;
     let t = t_c.as_slice()?;
+    ensure_equal_lengths(&[("p_hpa", p.len()), ("t_c", t.len())])?;
     let result: Vec<f64> = p.iter().zip(t.iter())
         .map(|(&pi, &ti)| metfuncs::potential_temperature(pi, ti))
         .collect();
@@ -2976,13 +3007,14 @@ fn mixratio_arr<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let p = p_hpa.as_slice()?;
     let t = t_c.as_slice()?;
+    ensure_equal_lengths(&[("p_hpa", p.len()), ("t_c", t.len())])?;
     let result: Vec<f64> = p.iter().zip(t.iter())
         .map(|(&pi, &ti)| metfuncs::mixratio(pi, ti))
         .collect();
     Ok(PyArray1::from_vec(py, result))
 }
 
-/// Equivalent potential temperature for arrays. p in hPa, t/td in Celsius. Returns K.
+/// Equivalent potential temperature for arrays. p in hPa, t/td in Celsius. Returns Celsius.
 #[pyfunction]
 fn thetae_arr<'py>(
     py: Python<'py>,
@@ -2991,6 +3023,7 @@ fn thetae_arr<'py>(
     let p = p_hpa.as_slice()?;
     let t = t_c.as_slice()?;
     let td = td_c.as_slice()?;
+    ensure_equal_lengths(&[("p_hpa", p.len()), ("t_c", t.len()), ("td_c", td.len())])?;
     let result: Vec<f64> = p.iter().zip(t.iter().zip(td.iter()))
         .map(|(&pi, (&ti, &tdi))| metfuncs::thetae(pi, ti, tdi))
         .collect();
@@ -3005,6 +3038,7 @@ fn dewpoint_from_rh_arr<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let t = t_c.as_slice()?;
     let r = rh.as_slice()?;
+    ensure_equal_lengths(&[("t_c", t.len()), ("rh", r.len())])?;
     let result: Vec<f64> = t.iter().zip(r.iter())
         .map(|(&ti, &ri)| metfuncs::dewpoint_from_rh(ti, ri))
         .collect();
@@ -3020,6 +3054,7 @@ fn wet_bulb_temperature_arr<'py>(
     let p = p_hpa.as_slice()?;
     let t = t_c.as_slice()?;
     let td = td_c.as_slice()?;
+    ensure_equal_lengths(&[("p_hpa", p.len()), ("t_c", t.len()), ("td_c", td.len())])?;
     let result: Vec<f64> = p.iter().zip(t.iter().zip(td.iter()))
         .map(|(&pi, (&ti, &tdi))| metfuncs::wet_bulb_temperature(pi, ti, tdi))
         .collect();
@@ -3176,14 +3211,23 @@ fn interpolate_to_points<'py>(
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(
             format!("Unknown interpolation method '{}'. Use: bilinear, nearest, bicubic, budget", method)
         ))?;
+    let values = values.as_slice()?;
+    let lats = lats.as_slice()?;
+    let lons = lons.as_slice()?;
+    let target_lats = target_lats.as_slice()?;
+    let target_lons = target_lons.as_slice()?;
+    ensure_equal_lengths(&[
+        ("target_lats", target_lats.len()),
+        ("target_lons", target_lons.len()),
+    ])?;
 
     let result = regrid::interpolate_points(
-        values.as_slice()?,
-        lats.as_slice()?,
-        lons.as_slice()?,
+        values,
+        lats,
+        lons,
         nx, ny,
-        target_lats.as_slice()?,
-        target_lons.as_slice()?,
+        target_lats,
+        target_lons,
         interp,
     );
 
@@ -3352,6 +3396,15 @@ impl PyGrib2Writer {
         bitmap: Option<PyReadonlyArray1<bool>>,
     ) -> PyResult<()> {
         let vals = values.as_slice()?.to_vec();
+        let expected_len = nx as usize * ny as usize;
+        if vals.len() != expected_len {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "values has {} elements but nx*ny = {}",
+                vals.len(),
+                expected_len
+            )));
+        }
+        let values_len = vals.len();
 
         let dt = chrono::NaiveDateTime::parse_from_str(reference_time, "%Y-%m-%d %H:%M:%S")
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(
@@ -3386,6 +3439,30 @@ impl PyGrib2Writer {
             level_value,
         };
 
+        let bitmap = if let Some(bm) = bitmap {
+            let bitmap = bm.as_slice()?.to_vec();
+            if bitmap.len() != values_len {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "bitmap has {} elements but values has {}",
+                    bitmap.len(),
+                    values_len
+                )));
+            }
+            if let Some(idx) = bitmap
+                .iter()
+                .zip(vals.iter())
+                .position(|(&present, &value)| present && !value.is_finite())
+            {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "bitmap marks non-finite value at index {} as present",
+                    idx
+                )));
+            }
+            Some(bitmap)
+        } else {
+            None
+        };
+
         let mut builder = grib2::writer::MessageBuilder::new(discipline, vals)
             .grid(grid)
             .product(product)
@@ -3393,8 +3470,8 @@ impl PyGrib2Writer {
             .reference_time(dt)
             .packing(grib2::writer::PackingMethod::Simple { bits_per_value });
 
-        if let Some(bm) = bitmap {
-            builder = builder.bitmap(bm.as_slice()?.to_vec());
+        if let Some(bitmap) = bitmap {
+            builder = builder.bitmap(bitmap);
         }
 
         self.messages.push(builder);
@@ -3640,4 +3717,23 @@ fn _rustmet(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolate_vertical_py, m)?)?;
     m.add("__version__", "0.1.0")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_equal_lengths;
+    use pyo3::prepare_freethreaded_python;
+
+    #[test]
+    fn equal_lengths_pass_validation() {
+        prepare_freethreaded_python();
+        assert!(ensure_equal_lengths(&[("a", 4), ("b", 4), ("c", 4)]).is_ok());
+    }
+
+    #[test]
+    fn mismatched_lengths_fail_validation() {
+        prepare_freethreaded_python();
+        let err = ensure_equal_lengths(&[("a", 4), ("b", 3)]).unwrap_err();
+        assert!(err.to_string().contains("b has length 3, but a has length 4"));
+    }
 }

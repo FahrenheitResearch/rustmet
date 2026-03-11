@@ -2,7 +2,7 @@
 rustmet — Fast GRIB2 processor for weather models
 ==================================================
 
-Pure Rust GRIB2 parser with Python bindings. 5x faster than cfgrib/eccodes.
+Pure Rust GRIB2 parser with Python bindings for operational weather workflows.
 
 Quick start::
 
@@ -81,8 +81,11 @@ try:
         frost_point,
         psychrometric_vapor_pressure,
         potential_temperature,
+        potential_temperature_arr,
         equivalent_potential_temperature,
+        thetae_arr,
         wet_bulb_potential_temperature,
+        wet_bulb_temperature_arr,
         virtual_potential_temperature,
         lcl_pressure,
         py_lfc as lfc,
@@ -100,7 +103,9 @@ try:
         dry_static_energy,
         moist_static_energy,
         py_dewpoint as dewpoint,
+        dewpoint_from_rh_arr,
         mixing_ratio_from_relative_humidity,
+        mixratio_arr,
         relative_humidity_from_mixing_ratio,
         relative_humidity_from_specific_humidity,
         specific_humidity_from_dewpoint,
@@ -159,6 +164,7 @@ try:
         kinematic_flux,
         first_derivative,
         second_derivative,
+        vappres_arr,
         # Grid math / geospatial
         lat_lon_grid_deltas,
         geospatial_gradient,
@@ -996,8 +1002,11 @@ __all__ = [
     "frost_point",
     "psychrometric_vapor_pressure",
     "potential_temperature",
+    "potential_temperature_arr",
     "equivalent_potential_temperature",
+    "thetae_arr",
     "wet_bulb_potential_temperature",
+    "wet_bulb_temperature_arr",
     "virtual_potential_temperature",
     "lcl_pressure",
     "lfc",
@@ -1015,7 +1024,9 @@ __all__ = [
     "dry_static_energy",
     "moist_static_energy",
     "dewpoint",
+    "dewpoint_from_rh_arr",
     "mixing_ratio_from_relative_humidity",
+    "mixratio_arr",
     "relative_humidity_from_mixing_ratio",
     "relative_humidity_from_specific_humidity",
     "specific_humidity_from_dewpoint",
@@ -1116,6 +1127,7 @@ __all__ = [
     "kinematic_flux",
     "first_derivative",
     "second_derivative",
+    "vappres_arr",
     # Grid math
     "lat_lon_grid_deltas",
     "geospatial_gradient",
