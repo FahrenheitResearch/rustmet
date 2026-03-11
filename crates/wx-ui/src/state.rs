@@ -192,7 +192,7 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            active_view: View::Map,
+            active_view: View::Download,
             file_path: None,
             grib: None,
             messages: Vec::new(),

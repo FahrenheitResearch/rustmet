@@ -44,33 +44,58 @@ pub fn map_view(ui: &mut egui::Ui, state: &mut AppState, ctx: &egui::Context) {
     }
 
     let Some(ref texture) = state.field_texture else {
-        // Empty state — show welcome
+        // No data loaded — prompt to download or open
         ui.centered_and_justified(|ui| {
             ui.vertical_centered(|ui| {
-                ui.add_space(ui.available_height() / 3.0);
+                ui.add_space(ui.available_height() / 4.0);
                 ui.label(
                     egui::RichText::new("WxView")
                         .heading()
                         .strong()
                         .color(theme::ACCENT),
                 );
-                ui.add_space(8.0);
+                ui.add_space(4.0);
                 ui.label(
                     egui::RichText::new("Atmospheric Analysis Engine")
                         .color(theme::TEXT_DIM),
                 );
-                ui.add_space(24.0);
-                ui.label(
-                    egui::RichText::new("Open a GRIB2 file to begin  (Ctrl+O)")
-                        .color(theme::TEXT_DIM),
-                );
-                ui.add_space(8.0);
-                ui.label(
-                    egui::RichText::new("or drag & drop a file onto this window")
-                        .small()
-                        .color(theme::TEXT_DIM),
-                );
                 ui.add_space(32.0);
+
+                // Big download button
+                let dl_btn = egui::Button::new(
+                    egui::RichText::new("   Download Weather Data   ")
+                        .strong()
+                        .size(16.0)
+                        .color(egui::Color32::WHITE),
+                )
+                .fill(theme::ACCENT)
+                .min_size(egui::vec2(280.0, 44.0));
+                if ui.add(dl_btn).clicked() {
+                    state.active_view = crate::state::View::Download;
+                }
+
+                ui.add_space(16.0);
+                ui.label(egui::RichText::new("or").color(theme::TEXT_DIM));
+                ui.add_space(8.0);
+
+                let open_btn = egui::Button::new(
+                    egui::RichText::new("Open GRIB2 File  (Ctrl+O)")
+                        .color(egui::Color32::WHITE),
+                )
+                .min_size(egui::vec2(220.0, 32.0));
+                if ui.add(open_btn).clicked() {
+                    super::open_file_dialog(state);
+                }
+
+                ui.add_space(24.0);
+                if state.selected_msg.is_some() && state.field_values.is_some() {
+                    ui.label(
+                        egui::RichText::new("Data loaded — select a message in the sidebar to render")
+                            .color(theme::WARNING),
+                    );
+                }
+
+                ui.add_space(24.0);
                 ui.label(
                     egui::RichText::new("Keyboard: Up/Down navigate  |  R render mode  |  +/- zoom")
                         .small()
