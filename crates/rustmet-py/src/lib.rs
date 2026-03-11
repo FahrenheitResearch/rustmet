@@ -2951,6 +2951,93 @@ fn second_derivative<'py>(
 }
 
 // ------------------------------------------------------
+// Vectorized meteorological functions (array → array)
+// ------------------------------------------------------
+
+/// Potential temperature for arrays. p in hPa, t in Celsius. Returns array of K.
+#[pyfunction]
+fn potential_temperature_arr<'py>(
+    py: Python<'py>,
+    p_hpa: PyReadonlyArray1<f64>, t_c: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let p = p_hpa.as_slice()?;
+    let t = t_c.as_slice()?;
+    let result: Vec<f64> = p.iter().zip(t.iter())
+        .map(|(&pi, &ti)| metfuncs::potential_temperature(pi, ti))
+        .collect();
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Mixing ratio for arrays. p in hPa, t in Celsius. Returns array of g/kg.
+#[pyfunction]
+fn mixratio_arr<'py>(
+    py: Python<'py>,
+    p_hpa: PyReadonlyArray1<f64>, t_c: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let p = p_hpa.as_slice()?;
+    let t = t_c.as_slice()?;
+    let result: Vec<f64> = p.iter().zip(t.iter())
+        .map(|(&pi, &ti)| metfuncs::mixratio(pi, ti))
+        .collect();
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Equivalent potential temperature for arrays. p in hPa, t/td in Celsius. Returns K.
+#[pyfunction]
+fn thetae_arr<'py>(
+    py: Python<'py>,
+    p_hpa: PyReadonlyArray1<f64>, t_c: PyReadonlyArray1<f64>, td_c: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let p = p_hpa.as_slice()?;
+    let t = t_c.as_slice()?;
+    let td = td_c.as_slice()?;
+    let result: Vec<f64> = p.iter().zip(t.iter().zip(td.iter()))
+        .map(|(&pi, (&ti, &tdi))| metfuncs::thetae(pi, ti, tdi))
+        .collect();
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Dewpoint from RH for arrays. t in Celsius, rh in percent. Returns Celsius.
+#[pyfunction]
+fn dewpoint_from_rh_arr<'py>(
+    py: Python<'py>,
+    t_c: PyReadonlyArray1<f64>, rh: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let t = t_c.as_slice()?;
+    let r = rh.as_slice()?;
+    let result: Vec<f64> = t.iter().zip(r.iter())
+        .map(|(&ti, &ri)| metfuncs::dewpoint_from_rh(ti, ri))
+        .collect();
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Wet bulb temperature for arrays. p in hPa, t/td in Celsius. Returns Celsius.
+#[pyfunction]
+fn wet_bulb_temperature_arr<'py>(
+    py: Python<'py>,
+    p_hpa: PyReadonlyArray1<f64>, t_c: PyReadonlyArray1<f64>, td_c: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let p = p_hpa.as_slice()?;
+    let t = t_c.as_slice()?;
+    let td = td_c.as_slice()?;
+    let result: Vec<f64> = p.iter().zip(t.iter().zip(td.iter()))
+        .map(|(&pi, (&ti, &tdi))| metfuncs::wet_bulb_temperature(pi, ti, tdi))
+        .collect();
+    Ok(PyArray1::from_vec(py, result))
+}
+
+/// Vapor pressure for arrays. t in Celsius. Returns hPa.
+#[pyfunction]
+fn vappres_arr<'py>(
+    py: Python<'py>,
+    t_c: PyReadonlyArray1<f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let t = t_c.as_slice()?;
+    let result: Vec<f64> = t.iter().map(|&ti| metfuncs::vappres(ti)).collect();
+    Ok(PyArray1::from_vec(py, result))
+}
+
+// ------------------------------------------------------
 // Grid math (geospatial derivatives, smoothing)
 // ------------------------------------------------------
 
@@ -3526,6 +3613,13 @@ fn _rustmet(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interpolate_point, m)?)?;
     m.add_function(wrap_pyfunction!(first_derivative, m)?)?;
     m.add_function(wrap_pyfunction!(second_derivative, m)?)?;
+    // Vectorized array versions of scalar met functions
+    m.add_function(wrap_pyfunction!(potential_temperature_arr, m)?)?;
+    m.add_function(wrap_pyfunction!(mixratio_arr, m)?)?;
+    m.add_function(wrap_pyfunction!(thetae_arr, m)?)?;
+    m.add_function(wrap_pyfunction!(dewpoint_from_rh_arr, m)?)?;
+    m.add_function(wrap_pyfunction!(wet_bulb_temperature_arr, m)?)?;
+    m.add_function(wrap_pyfunction!(vappres_arr, m)?)?;
     // GRIB2 field operations
     m.add_function(wrap_pyfunction!(field_stats, m)?)?;
     m.add_function(wrap_pyfunction!(smooth, m)?)?;
