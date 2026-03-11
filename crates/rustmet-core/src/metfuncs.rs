@@ -737,18 +737,17 @@ pub fn potential_temperature(p_hpa: f64, t_c: f64) -> f64 {
 /// p_hpa: pressure (hPa), t_c: temperature (C), td_c: dewpoint (C).
 pub fn equivalent_potential_temperature(p_hpa: f64, t_c: f64, td_c: f64) -> f64 {
     let t_k = t_c + ZEROCNK;
-    // Clamp dewpoint to not exceed temperature (physical constraint)
-    let td_c_clamped = td_c.min(t_c);
-    let td_k = td_c_clamped + ZEROCNK;
+    let td_k = td_c + ZEROCNK;
     // Bolton LCL temperature (Bolton 1980 eq 15)
     let t_lcl = 56.0 + 1.0 / (1.0 / (td_k - 56.0) + (t_k / td_k).ln() / 800.0);
-    // Mixing ratio at dewpoint (kg/kg)
-    let e = saturation_vapor_pressure(td_c_clamped);
-    let r = (EPS * e / (p_hpa - e)).max(0.0); // clamp negative (when es > p)
-    // Bolton (1980) eq 43
-    let theta_e = t_k * (1000.0 / p_hpa).powf(0.2854 * (1.0 - 0.28 * r))
-        * ((3036.0 / t_lcl - 1.78) * r * (1.0 + 0.81 * r)).exp();
-    theta_e
+    // Vapor pressure and mixing ratio at dewpoint (kg/kg)
+    let e = saturation_vapor_pressure(td_c);
+    let r = EPS * e / (p_hpa - e);
+    // Bolton (1980) eq 39 (matches MetPy's implementation)
+    // θ_DL = T * (1000/(p-e))^κ * (T/T_L)^(0.28*r)
+    let theta_dl = t_k * (1000.0 / (p_hpa - e)).powf(ROCP) * (t_k / t_lcl).powf(0.28 * r);
+    // θ_E = θ_DL * exp((3036/T_L - 1.78) * r * (1 + 0.448*r))
+    theta_dl * ((3036.0 / t_lcl - 1.78) * r * (1.0 + 0.448 * r)).exp()
 }
 
 /// Wet bulb potential temperature (K) from pressure (hPa), temp (C), dewpoint (C).
@@ -2251,27 +2250,34 @@ mod tests {
 
     #[test]
     fn test_equivalent_potential_temperature_typical() {
-        // At 1000 hPa, 25C, Td=20C, theta-e should be ~338.5K (Bolton 1980)
+        // At 1000 hPa, 25C, Td=20C — MetPy gives 341.53K (Bolton eq 39)
         let theta_e = equivalent_potential_temperature(1000.0, 25.0, 20.0);
-        assert!((theta_e - 338.5).abs() < 2.0, "theta_e={theta_e}, expected ~338.5");
+        assert!((theta_e - 341.53).abs() < 0.5, "theta_e={theta_e}, expected ~341.53");
     }
 
     #[test]
-    fn test_equivalent_potential_temperature_bolton_cases() {
-        // Dry case: Td << T, theta-e ≈ theta
-        let theta = potential_temperature(850.0, 10.0);
-        let theta_e = equivalent_potential_temperature(850.0, 10.0, -20.0);
-        assert!((theta_e - theta).abs() < 3.0, "dry: theta_e={theta_e}, theta={theta}");
+    fn test_equivalent_potential_temperature_metpy_parity() {
+        // Reference values from MetPy 1.7.1 (Bolton 1980 eq 39)
+        // Small residual diffs (~0.05K) from SVP formula difference (Bolton vs Clausius-Clapeyron)
+        let cases: &[(f64, f64, f64, f64, &str)] = &[
+            (1000.0, 25.0, 20.0, 341.53, "typical"),
+            (1000.0, 20.0, 15.0, 324.06, "mild"),
+            (850.0,  10.0, -20.0, 299.62, "dry"),
+            (500.0,  -30.0, -35.0, 297.74, "cold"),
+            (1000.0, 30.0, 30.0, 386.01, "saturated"),
+        ];
+        for &(p, t, td, expected, label) in cases {
+            let theta_e = equivalent_potential_temperature(p, t, td);
+            assert!(
+                (theta_e - expected).abs() < 1.0,
+                "{label}: theta_e={theta_e:.2}, expected ~{expected}"
+            );
+        }
+    }
 
-        // Saturated case: Td = T
-        let theta_e = equivalent_potential_temperature(1000.0, 30.0, 30.0);
-        assert!(theta_e > 370.0 && theta_e < 410.0, "saturated: theta_e={theta_e}");
-
-        // Cold case: at 500 hPa, -30C, Td=-35C, theta-e ≈ 297K
-        let theta_e = equivalent_potential_temperature(500.0, -30.0, -35.0);
-        assert!(theta_e > 290.0 && theta_e < 310.0, "cold: theta_e={theta_e}");
-
-        // Edge: Td > T (unphysical but shouldn't panic)
+    #[test]
+    fn test_equivalent_potential_temperature_edge_cases() {
+        // Td > T (unphysical but shouldn't panic)
         let theta_e = equivalent_potential_temperature(1000.0, 20.0, 25.0);
         assert!(theta_e.is_finite(), "supersaturated: theta_e={theta_e} should be finite");
     }
