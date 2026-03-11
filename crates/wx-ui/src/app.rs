@@ -57,6 +57,7 @@ impl eframe::App for WxApp {
                 crate::state::View::Map => panels::map_view(ui, &mut self.state, ctx),
                 crate::state::View::Sounding => panels::sounding_view(ui, &mut self.state, ctx),
                 crate::state::View::Hodograph => panels::hodograph_view(ui, &mut self.state, ctx),
+                crate::state::View::Radar => panels::radar_panel(ui, &mut self.state),
                 crate::state::View::Download => panels::download_panel(ui, &mut self.state),
                 crate::state::View::Info => panels::info_panel(ui, &self.state),
             }
@@ -97,12 +98,13 @@ impl WxApp {
             if i.key_pressed(egui::Key::Minus) {
                 self.state.zoom = (self.state.zoom / 1.25).max(0.1);
             }
-            // 1-5: switch views
+            // 1-6: switch views
             if i.key_pressed(egui::Key::Num1) { self.state.active_view = crate::state::View::Map; }
             if i.key_pressed(egui::Key::Num2) { self.state.active_view = crate::state::View::Sounding; }
             if i.key_pressed(egui::Key::Num3) { self.state.active_view = crate::state::View::Hodograph; }
-            if i.key_pressed(egui::Key::Num4) { self.state.active_view = crate::state::View::Download; }
-            if i.key_pressed(egui::Key::Num5) { self.state.active_view = crate::state::View::Info; }
+            if i.key_pressed(egui::Key::Num4) { self.state.active_view = crate::state::View::Radar; }
+            if i.key_pressed(egui::Key::Num5) { self.state.active_view = crate::state::View::Download; }
+            if i.key_pressed(egui::Key::Num6) { self.state.active_view = crate::state::View::Info; }
             // R: toggle render mode
             if i.key_pressed(egui::Key::R) && !i.modifiers.command {
                 self.state.render_mode = match self.state.render_mode {

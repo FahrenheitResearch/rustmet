@@ -10,6 +10,7 @@ pub enum View {
     Map,
     Sounding,
     Hodograph,
+    Radar,
     Download,
     Info,
 }
@@ -20,6 +21,7 @@ impl View {
             View::Map => "Map View",
             View::Sounding => "Skew-T",
             View::Hodograph => "Hodograph",
+            View::Radar => "Radar",
             View::Download => "Download",
             View::Info => "File Info",
         }
@@ -30,6 +32,7 @@ impl View {
             View::Map => "\u{1F5FA}",
             View::Sounding => "\u{1F321}",
             View::Hodograph => "\u{1F300}",
+            View::Radar => "\u{1F4E1}",
             View::Download => "\u{2B07}",
             View::Info => "\u{2139}",
         }
@@ -40,6 +43,7 @@ pub const ALL_VIEWS: &[View] = &[
     View::Map,
     View::Sounding,
     View::Hodograph,
+    View::Radar,
     View::Download,
     View::Info,
 ];
@@ -291,7 +295,7 @@ impl AppState {
             return;
         }
         let msg = &grib.messages[idx];
-        match grib2::unpack_message(msg) {
+        match grib2::unpack_message_normalized(msg) {
             Ok(values) => {
                 self.field_nx = msg.grid.nx as usize;
                 self.field_ny = msg.grid.ny as usize;

@@ -3,6 +3,7 @@ mod map_view;
 mod message_list;
 mod sounding;
 mod hodograph;
+mod radar;
 mod download;
 mod info_panel;
 
@@ -10,6 +11,7 @@ pub use sidebar::sidebar;
 pub use map_view::map_view;
 pub use sounding::sounding_view;
 pub use hodograph::hodograph_view;
+pub use radar::radar_panel;
 pub use download::download_panel;
 pub use info_panel::info_panel;
 

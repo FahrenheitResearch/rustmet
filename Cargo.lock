@@ -6093,6 +6093,7 @@ dependencies = [
  "egui 0.29.1",
  "egui_extras",
  "rfd",
+ "rustmaps",
  "rustmet-core",
  "wx-field",
  "wx-math",

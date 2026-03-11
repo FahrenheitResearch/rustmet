@@ -26,5 +26,8 @@ rustmet-core = { path = "../rustmet-core" }
 wx-field = { path = "../wx-field" }
 wx-math = { path = "../wx-math" }
 
+# Geographic data (basemaps)
+rustmaps = { git = "https://github.com/FahrenheitResearch/rustmaps.git" }
+
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
