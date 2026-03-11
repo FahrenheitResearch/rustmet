@@ -28,6 +28,7 @@ pub fn run(
     var: &str,
     level: &str,
     fhour: u32,
+    raw: bool,
     pretty: bool,
 ) {
     let model_lower = model.to_lowercase();
@@ -142,20 +143,22 @@ pub fn run(
     let mut pixels = render_raster_par(&render_values, nx, ny, colormap, vmin, vmax);
 
     // Draw basemap overlay (state lines, coastlines, country borders)
-    let grid = &msg.grid;
-    let flipped = msg.grid.scan_mode & 0x40 != 0;
-    let proj = build_projection(grid);
-    if let Some(ref proj) = proj {
-        let ny_f = ny;
-        basemap::draw_basemap(&mut pixels, nx, ny, |lat, lon| {
-            let (gi, gj) = proj.latlon_to_grid(lat, lon);
-            if gi < -0.5 || gi >= nx as f64 + 0.5 || gj < -0.5 || gj >= ny_f as f64 + 0.5 {
-                return None;
-            }
-            // If rows were flipped for rendering, reverse j mapping
-            let pj = if flipped { (ny_f as f64 - 1.0) - gj } else { gj };
-            Some((gi, pj))
-        });
+    if !raw {
+        let grid = &msg.grid;
+        let flipped = msg.grid.scan_mode & 0x40 != 0;
+        let proj = build_projection(grid);
+        if let Some(ref proj) = proj {
+            let ny_f = ny;
+            basemap::draw_basemap(&mut pixels, nx, ny, |lat, lon| {
+                let (gi, gj) = proj.latlon_to_grid(lat, lon);
+                if gi < -0.5 || gi >= nx as f64 + 0.5 || gj < -0.5 || gj >= ny_f as f64 + 0.5 {
+                    return None;
+                }
+                // If rows were flipped for rendering, reverse j mapping
+                let pj = if flipped { (ny_f as f64 - 1.0) - gj } else { gj };
+                Some((gi, pj))
+            });
+        }
     }
 
     let render_ms = render_start.elapsed().as_millis();
@@ -185,6 +188,7 @@ pub fn run(
         "variable_short": var,
         "level": level,
         "units": param_units,
+        "raw": raw,
         "colormap": colormap,
         "value_range": [vmin, vmax],
         "grid": {

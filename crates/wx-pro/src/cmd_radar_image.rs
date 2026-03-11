@@ -32,6 +32,7 @@ pub fn run(
     lon: Option<f64>,
     product: &str,
     size: u32,
+    raw: bool,
     pretty: bool,
 ) {
     // Resolve site
@@ -105,63 +106,65 @@ pub fn run(
     let mut pixels = ppi.pixels;
     let img_size = ppi.size as usize;
 
-    // Draw range rings (50km, 100km, 150km, 200km)
-    let center = img_size as f64 / 2.0;
-    let px_per_km = center / ppi.range_km;
-    for ring_km in [50.0, 100.0, 150.0, 200.0] {
-        let ring_px = ring_km * px_per_km;
-        if ring_px > 0.0 && ring_px < center {
-            draw_circle(&mut pixels, img_size, center, center, ring_px, [180, 180, 180, 160]);
+    if !raw {
+        // Draw range rings (50km, 100km, 150km, 200km)
+        let center = img_size as f64 / 2.0;
+        let px_per_km = center / ppi.range_km;
+        for ring_km in [50.0, 100.0, 150.0, 200.0] {
+            let ring_px = ring_km * px_per_km;
+            if ring_px > 0.0 && ring_px < center {
+                draw_circle(&mut pixels, img_size, center, center, ring_px, [180, 180, 180, 160]);
+            }
         }
-    }
 
-    // Draw crosshairs (N-S, E-W lines through center)
-    for i in 0..img_size {
-        // Vertical line (N-S)
+        // Draw crosshairs (N-S, E-W lines through center)
+        for i in 0..img_size {
+            // Vertical line (N-S)
+            let cx = img_size / 2;
+            blend_pixel(&mut pixels, img_size, cx, i, [120, 120, 120, 80]);
+            // Horizontal line (E-W)
+            blend_pixel(&mut pixels, img_size, i, img_size / 2, [120, 120, 120, 80]);
+        }
+
+        // Draw basemap (state lines, coastlines, country borders)
+        if let Some(si) = site_info.as_ref() {
+            let site_lat = si.lat;
+            let site_lon = si.lon;
+            let range = ppi.range_km;
+            let half = img_size as f64 / 2.0;
+            let km_per_deg_lat = 111.139;
+
+            basemap::draw_basemap(&mut pixels, img_size, img_size, |lat, lon| {
+                // Convert lat/lon offset from site to km
+                let dy_km = (lat - site_lat) * km_per_deg_lat;
+                let dx_km = (lon - site_lon) * km_per_deg_lat * site_lat.to_radians().cos();
+
+                // Check range
+                if dx_km.abs() > range || dy_km.abs() > range {
+                    return None;
+                }
+
+                // Convert km to pixels (center = site, +x = east, +y = south in image)
+                let px = half + dx_km * (half / range);
+                let py = half - dy_km * (half / range); // y is inverted (north = up)
+
+                if px < -1.0 || px >= img_size as f64 + 1.0 || py < -1.0 || py >= img_size as f64 + 1.0 {
+                    return None;
+                }
+                Some((px, py))
+            });
+        }
+
+        // Draw center dot (radar site)
         let cx = img_size / 2;
-        blend_pixel(&mut pixels, img_size, cx, i, [120, 120, 120, 80]);
-        // Horizontal line (E-W)
-        blend_pixel(&mut pixels, img_size, i, img_size / 2, [120, 120, 120, 80]);
-    }
-
-    // Draw basemap (state lines, coastlines, country borders)
-    if let Some(si) = site_info.as_ref() {
-        let site_lat = si.lat;
-        let site_lon = si.lon;
-        let range = ppi.range_km;
-        let half = img_size as f64 / 2.0;
-        let km_per_deg_lat = 111.139;
-
-        basemap::draw_basemap(&mut pixels, img_size, img_size, |lat, lon| {
-            // Convert lat/lon offset from site to km
-            let dy_km = (lat - site_lat) * km_per_deg_lat;
-            let dx_km = (lon - site_lon) * km_per_deg_lat * site_lat.to_radians().cos();
-
-            // Check range
-            if dx_km.abs() > range || dy_km.abs() > range {
-                return None;
-            }
-
-            // Convert km to pixels (center = site, +x = east, +y = south in image)
-            let px = half + dx_km * (half / range);
-            let py = half - dy_km * (half / range); // y is inverted (north = up)
-
-            if px < -1.0 || px >= img_size as f64 + 1.0 || py < -1.0 || py >= img_size as f64 + 1.0 {
-                return None;
-            }
-            Some((px, py))
-        });
-    }
-
-    // Draw center dot (radar site)
-    let cx = img_size / 2;
-    let cy = img_size / 2;
-    for dy in -2i32..=2 {
-        for dx in -2i32..=2 {
-            let px = (cx as i32 + dx) as usize;
-            let py = (cy as i32 + dy) as usize;
-            if px < img_size && py < img_size {
-                set_pixel(&mut pixels, img_size, px, py, [255, 255, 255, 255]);
+        let cy = img_size / 2;
+        for dy in -2i32..=2 {
+            for dx in -2i32..=2 {
+                let px = (cx as i32 + dx) as usize;
+                let py = (cy as i32 + dy) as usize;
+                if px < img_size && py < img_size {
+                    set_pixel(&mut pixels, img_size, px, py, [255, 255, 255, 255]);
+                }
             }
         }
     }
@@ -185,6 +188,7 @@ pub fn run(
         "product_full": radar_product.display_name(),
         "elevation_deg": (elev * 10.0).round() / 10.0,
         "range_km": (ppi.range_km * 10.0).round() / 10.0,
+        "raw": raw,
         "image_size": ppi.size,
         "file": filename,
         "performance": {

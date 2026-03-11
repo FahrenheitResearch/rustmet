@@ -25,6 +25,7 @@ mod basemap;
 mod cmd_scan;
 mod cmd_timeseries;
 mod cmd_evidence;
+mod cmd_tiles;
 
 use clap::{Parser, Subcommand};
 
@@ -296,6 +297,9 @@ enum Commands {
         /// Image size in pixels (default: 800)
         #[arg(long, default_value = "800")]
         size: u32,
+        /// Raw data layer only — no basemap, no overlays (for map tile compositing)
+        #[arg(long)]
+        raw: bool,
     },
 
     /// Render a model field (HRRR/GFS/etc) as a PNG image
@@ -313,6 +317,9 @@ enum Commands {
         /// Forecast hour
         #[arg(long, default_value = "0")]
         fhour: u32,
+        /// Raw data layer only — no basemap, no overlays (for map tile compositing)
+        #[arg(long)]
+        raw: bool,
     },
 
     /// Time series of a model variable at a point (forecast evolution + event detection)
@@ -386,6 +393,32 @@ enum Commands {
         lon2: Option<f64>,
     },
 
+    /// Generate XYZ map tiles (256x256 transparent PNGs) from model data for web maps
+    #[command(allow_negative_numbers = true)]
+    Tiles {
+        /// Model name (hrrr, rap, gfs, nam)
+        #[arg(long, default_value = "hrrr")]
+        model: String,
+        /// Variable (cape, refc, temp, dewpoint, rh, helicity, uh, gust, wind_u, precip, etc.)
+        #[arg(long)]
+        var: String,
+        /// Level (surface, 2m, 10m, 500mb, 0-3km, etc.)
+        #[arg(long, default_value = "surface")]
+        level: String,
+        /// Forecast hour
+        #[arg(long, default_value = "0")]
+        fhour: u32,
+        /// Zoom level (0-18)
+        #[arg(long)]
+        z: u32,
+        /// Tile X coordinate (omit with y for tile set mode)
+        #[arg(long)]
+        x: Option<u32>,
+        /// Tile Y coordinate (omit with x for tile set mode)
+        #[arg(long)]
+        y: Option<u32>,
+    },
+
     /// Describe all commands for agent discovery
     #[command(name = "commands")]
     AgentHelp,
@@ -445,11 +478,11 @@ fn main() {
         Commands::WatchBox { lat, lon, radius_km, interval_sec, threshold_dbz } => {
             cmd_watch_box::run(lat, lon, radius_km, interval_sec, threshold_dbz, pretty);
         }
-        Commands::RadarImage { site, lat, lon, product, size } => {
-            cmd_radar_image::run(&site, lat, lon, &product, size, pretty);
+        Commands::RadarImage { site, lat, lon, product, size, raw } => {
+            cmd_radar_image::run(&site, lat, lon, &product, size, raw, pretty);
         }
-        Commands::ModelImage { model, var, level, fhour } => {
-            cmd_model_image::run(&model, &var, &level, fhour, pretty);
+        Commands::ModelImage { model, var, level, fhour, raw } => {
+            cmd_model_image::run(&model, &var, &level, fhour, raw, pretty);
         }
         Commands::Timeseries { lat, lon, var, level, model, hours } => {
             cmd_timeseries::run(lat, lon, &var, &level, &model, hours, pretty);
@@ -459,6 +492,9 @@ fn main() {
         }
         Commands::Scan { source, var, level, fhour, mode, top_n, threshold, separation_km, lat1, lon1, lat2, lon2 } => {
             cmd_scan::run(&source, &var, &level, fhour, &mode, top_n, threshold, separation_km, lat1, lon1, lat2, lon2, pretty);
+        }
+        Commands::Tiles { model, var, level, fhour, z, x, y } => {
+            cmd_tiles::run(&model, &var, &level, fhour, z, x, y, pretty);
         }
         Commands::AgentHelp => cmd_help::run(pretty),
     }

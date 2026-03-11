@@ -484,6 +484,10 @@ fn tool_definitions() -> Value {
                         "size": {
                             "type": "number",
                             "description": "Image size in pixels (default: 800)"
+                        },
+                        "raw": {
+                            "type": "boolean",
+                            "description": "Raw data layer only — no basemap/overlays. Use for map tile compositing. Default: false"
                         }
                     }
                 }
@@ -509,6 +513,10 @@ fn tool_definitions() -> Value {
                         "fhour": {
                             "type": "number",
                             "description": "Forecast hour (default: 0 = analysis)"
+                        },
+                        "raw": {
+                            "type": "boolean",
+                            "description": "Raw data layer only — no basemap/overlays. Use for map tile compositing. Default: false"
                         }
                     },
                     "required": ["var"]
@@ -617,6 +625,44 @@ fn tool_definitions() -> Value {
                     },
                     "required": ["lat", "lon"]
                 }
+            },
+            {
+                "name": "wx_tiles",
+                "description": "Generate XYZ map tiles (256x256 transparent PNGs) from NWP model data. Tiles overlay directly on Leaflet, Mapbox, Google Maps. Single tile mode: specify z/x/y. Tile set mode: specify only z to generate all tiles at that zoom level for the model domain. Returns file paths to generated tiles.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "var": {
+                            "type": "string",
+                            "description": "Variable: cape, refc, temp, dewpoint, rh, gust, helicity, uh, wind_u, wind_v, precip, cloud, snow, vis, pwat, mslp"
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "NWP model: hrrr (default), rap, gfs, nam"
+                        },
+                        "level": {
+                            "type": "string",
+                            "description": "Level: surface (default), 2m, 10m, 500mb, 850mb, 0-3km"
+                        },
+                        "fhour": {
+                            "type": "number",
+                            "description": "Forecast hour (default: 0)"
+                        },
+                        "z": {
+                            "type": "number",
+                            "description": "Zoom level (1-10, recommended 3-7 for weather data)"
+                        },
+                        "x": {
+                            "type": "number",
+                            "description": "Tile X coordinate (omit with y for tile set mode)"
+                        },
+                        "y": {
+                            "type": "number",
+                            "description": "Tile Y coordinate (omit with x for tile set mode)"
+                        }
+                    },
+                    "required": ["var", "z"]
+                }
             }
         ]
     })
@@ -673,6 +719,7 @@ fn handle_tools_call(params: &Value) -> Value {
         "wx_scan" => call_wx_scan(&arguments),
         "wx_timeseries" => call_wx_timeseries(&arguments),
         "wx_evidence" => call_wx_evidence(&arguments),
+        "wx_tiles" => call_wx_tiles(&arguments),
         _ => mcp_error(&format!("Unknown tool: {}", tool_name)),
     }
 }
@@ -908,6 +955,9 @@ fn call_wx_radar_image(args: &Value) -> Value {
     if extra.is_empty() {
         return mcp_error("Provide site or lat/lon for radar-image");
     }
+    if args.get("raw").and_then(|v| v.as_bool()).unwrap_or(false) {
+        extra.push("--raw");
+    }
     cmd_args.extend(extra.iter());
     run_wx_pro(&cmd_args)
 }
@@ -937,6 +987,9 @@ fn call_wx_model_image(args: &Value) -> Value {
     if let Some(fhour) = args.get("fhour").and_then(|v| v.as_f64()) {
         fhour_s = format!("{}", fhour as u32);
         cmd_args.extend(["--fhour", &fhour_s]);
+    }
+    if args.get("raw").and_then(|v| v.as_bool()).unwrap_or(false) {
+        cmd_args.push("--raw");
     }
     run_wx_pro(&cmd_args)
 }
@@ -1042,6 +1095,35 @@ fn call_wx_evidence(args: &Value) -> Value {
     let lat_s = format!("{}", lat);
     let lon_s = format!("{}", lon);
     run_wx_pro(&["evidence", "--lat", &lat_s, "--lon", &lon_s])
+}
+
+fn call_wx_tiles(args: &Value) -> Value {
+    let Some(var) = args.get("var").and_then(|v| v.as_str()) else {
+        return mcp_error("Missing required parameter: var");
+    };
+    let Some(z) = args.get("z").and_then(|v| v.as_f64()) else {
+        return mcp_error("Missing required parameter: z");
+    };
+    let model = args.get("model").and_then(|v| v.as_str()).unwrap_or("hrrr");
+    let level = args.get("level").and_then(|v| v.as_str()).unwrap_or("surface");
+    let z_s = format!("{}", z as u32);
+    let fhour_s;
+    let x_s;
+    let y_s;
+    let mut cmd_args = vec!["tiles", "--model", model, "--var", var, "--level", level, "--z", &z_s];
+    if let Some(fhour) = args.get("fhour").and_then(|v| v.as_f64()) {
+        fhour_s = format!("{}", fhour as u32);
+        cmd_args.extend(["--fhour", &fhour_s]);
+    }
+    if let Some(x) = args.get("x").and_then(|v| v.as_f64()) {
+        x_s = format!("{}", x as u32);
+        cmd_args.extend(["--x", &x_s]);
+    }
+    if let Some(y) = args.get("y").and_then(|v| v.as_f64()) {
+        y_s = format!("{}", y as u32);
+        cmd_args.extend(["--y", &y_s]);
+    }
+    run_wx_pro(&cmd_args)
 }
 
 // ─── Execution helpers ───────────────────────────────────────────────────────
