@@ -1,0 +1,9 @@
+[package]
+name = "wx-io"
+version = "0.1.0"
+edition = "2021"
+description = "Weather data I/O — GRIB2, NetCDF, NEXRAD readers"
+license = "MIT"
+authors = ["Fahrenheit Research"]
+
+[dependencies]

@@ -3910,6 +3910,7 @@ dependencies = [
  "thiserror 2.0.18",
  "ureq",
  "webpki-roots 0.26.11",
+ "wx-field",
 ]
 
 [[package]]
@@ -5654,6 +5655,29 @@ name = "writeable"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
+
+[[package]]
+name = "wx-field"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
+name = "wx-io"
+version = "0.1.0"
+
+[[package]]
+name = "wx-math"
+version = "0.1.0"
+
+[[package]]
+name = "wx-radar"
+version = "0.1.0"
+
+[[package]]
+name = "wx-render"
+version = "0.1.0"
 
 [[package]]
 name = "x11-dl"

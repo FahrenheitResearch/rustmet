@@ -39,3 +39,6 @@ png = "0.17"
 
 # Parallelism
 rayon = "1"
+
+# Shared field types and projections
+wx-field = { path = "../wx-field" }

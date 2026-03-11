@@ -1,0 +1,9 @@
+[package]
+name = "wx-render"
+version = "0.1.0"
+edition = "2021"
+description = "Weather data rendering and visualization"
+license = "MIT"
+authors = ["Fahrenheit Research"]
+
+[dependencies]

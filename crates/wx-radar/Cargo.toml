@@ -1,0 +1,9 @@
+[package]
+name = "wx-radar"
+version = "0.1.0"
+edition = "2021"
+description = "Radar data processing — NEXRAD, TDWR, composites"
+license = "MIT"
+authors = ["Fahrenheit Research"]
+
+[dependencies]

@@ -1,0 +1,9 @@
+[package]
+name = "wx-math"
+version = "0.1.0"
+edition = "2021"
+description = "Meteorological computations and grid math"
+license = "MIT"
+authors = ["Fahrenheit Research"]
+
+[dependencies]
