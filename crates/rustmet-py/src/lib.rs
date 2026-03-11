@@ -2999,7 +2999,8 @@ fn potential_temperature_arr<'py>(
     Ok(PyArray1::from_vec(py, result))
 }
 
-/// Mixing ratio for arrays. p in hPa, t in Celsius. Returns array of g/kg.
+/// Saturation mixing ratio for arrays. p in hPa, t in Celsius. Returns array of g/kg.
+/// Uses Bolton (1980) saturation vapor pressure formula (matches MetPy).
 #[pyfunction]
 fn mixratio_arr<'py>(
     py: Python<'py>,
@@ -3009,12 +3010,13 @@ fn mixratio_arr<'py>(
     let t = t_c.as_slice()?;
     ensure_equal_lengths(&[("p_hpa", p.len()), ("t_c", t.len())])?;
     let result: Vec<f64> = p.iter().zip(t.iter())
-        .map(|(&pi, &ti)| metfuncs::mixratio(pi, ti))
+        .map(|(&pi, &ti)| metfuncs::saturation_mixing_ratio(pi, ti))
         .collect();
     Ok(PyArray1::from_vec(py, result))
 }
 
-/// Equivalent potential temperature for arrays. p in hPa, t/td in Celsius. Returns Celsius.
+/// Equivalent potential temperature for arrays using Bolton (1980) formula (matches MetPy).
+/// p in hPa, t/td in Celsius. Returns Kelvin.
 #[pyfunction]
 fn thetae_arr<'py>(
     py: Python<'py>,
@@ -3025,7 +3027,7 @@ fn thetae_arr<'py>(
     let td = td_c.as_slice()?;
     ensure_equal_lengths(&[("p_hpa", p.len()), ("t_c", t.len()), ("td_c", td.len())])?;
     let result: Vec<f64> = p.iter().zip(t.iter().zip(td.iter()))
-        .map(|(&pi, (&ti, &tdi))| metfuncs::thetae(pi, ti, tdi))
+        .map(|(&pi, (&ti, &tdi))| metfuncs::equivalent_potential_temperature(pi, ti, tdi))
         .collect();
     Ok(PyArray1::from_vec(py, result))
 }
@@ -3061,14 +3063,15 @@ fn wet_bulb_temperature_arr<'py>(
     Ok(PyArray1::from_vec(py, result))
 }
 
-/// Vapor pressure for arrays. t in Celsius. Returns hPa.
+/// Saturation vapor pressure for arrays using Bolton (1980) formula (matches MetPy).
+/// t in Celsius. Returns hPa.
 #[pyfunction]
 fn vappres_arr<'py>(
     py: Python<'py>,
     t_c: PyReadonlyArray1<f64>,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let t = t_c.as_slice()?;
-    let result: Vec<f64> = t.iter().map(|&ti| metfuncs::vappres(ti)).collect();
+    let result: Vec<f64> = t.iter().map(|&ti| metfuncs::saturation_vapor_pressure(ti)).collect();
     Ok(PyArray1::from_vec(py, result))
 }
 

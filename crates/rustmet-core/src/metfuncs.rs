@@ -677,7 +677,7 @@ pub fn mixing_ratio_from_specific_humidity(q: f64) -> f64 {
 /// Uses Bolton saturation vapor pressure.
 pub fn saturation_mixing_ratio(p_hpa: f64, t_c: f64) -> f64 {
     let es = saturation_vapor_pressure(t_c);
-    EPS * es / (p_hpa - es) * 1000.0
+    (EPS * es / (p_hpa - es) * 1000.0).max(0.0)
 }
 
 /// Vapor pressure (hPa) from dewpoint temperature (Celsius).
@@ -737,15 +737,17 @@ pub fn potential_temperature(p_hpa: f64, t_c: f64) -> f64 {
 /// p_hpa: pressure (hPa), t_c: temperature (C), td_c: dewpoint (C).
 pub fn equivalent_potential_temperature(p_hpa: f64, t_c: f64, td_c: f64) -> f64 {
     let t_k = t_c + ZEROCNK;
-    let td_k = td_c + ZEROCNK;
-    // Bolton LCL temperature
+    // Clamp dewpoint to not exceed temperature (physical constraint)
+    let td_c_clamped = td_c.min(t_c);
+    let td_k = td_c_clamped + ZEROCNK;
+    // Bolton LCL temperature (Bolton 1980 eq 15)
     let t_lcl = 56.0 + 1.0 / (1.0 / (td_k - 56.0) + (t_k / td_k).ln() / 800.0);
-    // Mixing ratio (kg/kg)
-    let e = saturation_vapor_pressure(td_c);
-    let r = EPS * e / (p_hpa - e); // kg/kg
-    // Bolton theta-e
+    // Mixing ratio at dewpoint (kg/kg)
+    let e = saturation_vapor_pressure(td_c_clamped);
+    let r = (EPS * e / (p_hpa - e)).max(0.0); // clamp negative (when es > p)
+    // Bolton (1980) eq 43
     let theta_e = t_k * (1000.0 / p_hpa).powf(0.2854 * (1.0 - 0.28 * r))
-        * (3036.0 / t_lcl - 1.78).exp().powf(r * (1.0 + 0.448 * r));
+        * ((3036.0 / t_lcl - 1.78) * r * (1.0 + 0.81 * r)).exp();
     theta_e
 }
 
@@ -2249,9 +2251,29 @@ mod tests {
 
     #[test]
     fn test_equivalent_potential_temperature_typical() {
-        // At 1000 hPa, 25C, Td=20C, theta-e should be ~340-350K
+        // At 1000 hPa, 25C, Td=20C, theta-e should be ~338.5K (Bolton 1980)
         let theta_e = equivalent_potential_temperature(1000.0, 25.0, 20.0);
-        assert!(theta_e > 335.0 && theta_e < 360.0, "theta_e={theta_e}");
+        assert!((theta_e - 338.5).abs() < 2.0, "theta_e={theta_e}, expected ~338.5");
+    }
+
+    #[test]
+    fn test_equivalent_potential_temperature_bolton_cases() {
+        // Dry case: Td << T, theta-e ≈ theta
+        let theta = potential_temperature(850.0, 10.0);
+        let theta_e = equivalent_potential_temperature(850.0, 10.0, -20.0);
+        assert!((theta_e - theta).abs() < 3.0, "dry: theta_e={theta_e}, theta={theta}");
+
+        // Saturated case: Td = T
+        let theta_e = equivalent_potential_temperature(1000.0, 30.0, 30.0);
+        assert!(theta_e > 370.0 && theta_e < 410.0, "saturated: theta_e={theta_e}");
+
+        // Cold case: at 500 hPa, -30C, Td=-35C, theta-e ≈ 297K
+        let theta_e = equivalent_potential_temperature(500.0, -30.0, -35.0);
+        assert!(theta_e > 290.0 && theta_e < 310.0, "cold: theta_e={theta_e}");
+
+        // Edge: Td > T (unphysical but shouldn't panic)
+        let theta_e = equivalent_potential_temperature(1000.0, 20.0, 25.0);
+        assert!(theta_e.is_finite(), "supersaturated: theta_e={theta_e} should be finite");
     }
 
     #[test]

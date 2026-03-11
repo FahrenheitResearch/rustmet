@@ -325,12 +325,55 @@ pub fn smooth_gaussian(values: &[f64], nx: usize, ny: usize, sigma: f64) -> Vec<
 
     let has_nan = values.iter().any(|v| v.is_nan());
 
-    // Separable filter: horizontal pass, then vertical pass
+    // Separable filter: horizontal pass, then vertical pass.
+    // The vertical pass uses a transpose so both passes access memory row-major.
     let mut temp = vec![0.0; nx * ny];
 
+    // Helper: 1D convolution on a contiguous slice (interior only, no bounds checks).
+    #[inline(always)]
+    fn convolve_1d_interior(src: &[f64], dst: &mut [f64], kernel: &[f64], radius: usize) {
+        let ksize = kernel.len();
+        let n = src.len();
+        // Boundary: renormalize
+        for i in 0..radius.min(n) {
+            let mut sum = 0.0;
+            let mut wsum = 0.0;
+            let i_max = (i + radius + 1).min(n);
+            for ii in 0..i_max {
+                let ki = ii + radius - i;
+                sum += src[ii] * kernel[ki];
+                wsum += kernel[ki];
+            }
+            dst[i] = sum / wsum;
+        }
+        // Interior: full kernel, tight loop, no bounds checks
+        for i in radius..(n.saturating_sub(radius)) {
+            let mut sum = 0.0;
+            let src_start = i - radius;
+            for ki in 0..ksize {
+                unsafe {
+                    sum += *src.get_unchecked(src_start + ki) * *kernel.get_unchecked(ki);
+                }
+            }
+            unsafe { *dst.get_unchecked_mut(i) = sum; }
+        }
+        // Right/bottom boundary
+        for i in n.saturating_sub(radius)..n {
+            if i < radius { continue; } // already handled above for tiny n
+            let mut sum = 0.0;
+            let mut wsum = 0.0;
+            let i_min = i - radius;
+            for ii in i_min..n {
+                let ki = ii + radius - i;
+                sum += src[ii] * kernel[ki];
+                wsum += kernel[ki];
+            }
+            dst[i] = sum / wsum;
+        }
+    }
+
     if has_nan {
-        // NaN-aware path: renormalize weights per pixel
-        // Horizontal pass
+        // NaN-aware horizontal pass
         for j in 0..ny {
             let row_start = j * nx;
             for i in 0..nx {
@@ -350,16 +393,20 @@ pub fn smooth_gaussian(values: &[f64], nx: usize, ny: usize, sigma: f64) -> Vec<
             }
         }
 
-        // Vertical pass (column-order for cache, transposed accumulation)
+        // NaN-aware vertical pass using column buffers for cache locality
         let mut result = vec![0.0; nx * ny];
+        let mut col_in = vec![0.0; ny];
         for i in 0..nx {
+            // Gather column into contiguous buffer
+            for j in 0..ny { col_in[j] = temp[j * nx + i]; }
+            // Convolve with NaN awareness
             for j in 0..ny {
                 let mut sum = 0.0;
                 let mut wsum = 0.0;
                 let j_min = if j >= radius { j - radius } else { 0 };
                 let j_max = (j + radius + 1).min(ny);
                 for jj in j_min..j_max {
-                    let v = temp[jj * nx + i];
+                    let v = col_in[jj];
                     if !v.is_nan() {
                         let kj = jj + radius - j;
                         sum += v * kernel[kj];
@@ -371,56 +418,29 @@ pub fn smooth_gaussian(values: &[f64], nx: usize, ny: usize, sigma: f64) -> Vec<
         }
         result
     } else {
-        // Fast path: no NaN values, skip NaN checks and weight renormalization.
-        // Horizontal pass
+        // Fast path: no NaN values.
+        // Horizontal pass — row-major, cache-friendly
         for j in 0..ny {
-            let row_start = j * nx;
-            for i in 0..nx {
-                let mut sum = 0.0;
-                let i_min = if i >= radius { i - radius } else { 0 };
-                let i_max = (i + radius + 1).min(nx);
-                // Interior points: full kernel applies, no boundary check
-                if i >= radius && i + radius < nx {
-                    for ki in 0..ksize {
-                        sum += values[row_start + i - radius + ki] * kernel[ki];
-                    }
-                } else {
-                    // Boundary: renormalize
-                    let mut wsum = 0.0;
-                    for ii in i_min..i_max {
-                        let ki = ii + radius - i;
-                        sum += values[row_start + ii] * kernel[ki];
-                        wsum += kernel[ki];
-                    }
-                    sum /= wsum;
-                }
-                temp[row_start + i] = sum;
-            }
+            let row = &values[j * nx..(j + 1) * nx];
+            let dst = &mut temp[j * nx..(j + 1) * nx];
+            convolve_1d_interior(row, dst, &kernel, radius);
         }
 
-        // Vertical pass — process in column order
+        // Vertical pass — gather column into contiguous buffer, convolve, scatter back.
+        // Column buffer stays in L1 cache (ny * 8 bytes, typically < 8KB).
         let mut result = vec![0.0; nx * ny];
+        let mut col_in = vec![0.0; ny];
+        let mut col_out = vec![0.0; ny];
         for i in 0..nx {
+            // Gather column i from temp (one strided read per column)
             for j in 0..ny {
-                let mut sum = 0.0;
-                if j >= radius && j + radius < ny {
-                    // Interior: full kernel
-                    for kj in 0..ksize {
-                        sum += temp[(j - radius + kj) * nx + i] * kernel[kj];
-                    }
-                } else {
-                    // Boundary: renormalize
-                    let mut wsum = 0.0;
-                    let j_min = if j >= radius { j - radius } else { 0 };
-                    let j_max = (j + radius + 1).min(ny);
-                    for jj in j_min..j_max {
-                        let kj = jj + radius - j;
-                        sum += temp[jj * nx + i] * kernel[kj];
-                        wsum += kernel[kj];
-                    }
-                    sum /= wsum;
-                }
-                result[j * nx + i] = sum;
+                unsafe { *col_in.get_unchecked_mut(j) = *temp.get_unchecked(j * nx + i); }
+            }
+            // Convolve on contiguous buffer (L1-resident)
+            convolve_1d_interior(&col_in, &mut col_out, &kernel, radius);
+            // Scatter back to result (one strided write per column)
+            for j in 0..ny {
+                unsafe { *result.get_unchecked_mut(j * nx + i) = *col_out.get_unchecked(j); }
             }
         }
         result

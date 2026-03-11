@@ -161,6 +161,23 @@ fn bench_smoothing(c: &mut Criterion) {
         });
     });
 
+    // 400x400 benchmarks (Codex test size — larger grid shows cache effects)
+    let nx4 = 400;
+    let ny4 = 400;
+    let field4: Vec<f64> = (0..nx4 * ny4).map(|i| (i as f64 * 0.01).sin()).collect();
+
+    group.bench_function("smooth_gaussian_400x400_sigma2", |b| {
+        b.iter(|| {
+            black_box(grib2::smooth_gaussian(&field4, nx4, ny4, 2.0));
+        });
+    });
+
+    group.bench_function("smooth_gaussian_400x400_sigma5", |b| {
+        b.iter(|| {
+            black_box(grib2::smooth_gaussian(&field4, nx4, ny4, 5.0));
+        });
+    });
+
     group.bench_function("smooth_n_point_9_1pass_200x200", |b| {
         b.iter(|| {
             black_box(grib2::smooth_n_point(&field, nx, ny, 9, 1));
