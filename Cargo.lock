@@ -3911,6 +3911,7 @@ dependencies = [
  "ureq",
  "webpki-roots 0.26.11",
  "wx-field",
+ "wx-math",
 ]
 
 [[package]]
@@ -5666,18 +5667,33 @@ dependencies = [
 [[package]]
 name = "wx-io"
 version = "0.1.0"
+dependencies = [
+ "rustmet-core",
+ "wx-field",
+]
 
 [[package]]
 name = "wx-math"
 version = "0.1.0"
+dependencies = [
+ "rayon",
+ "wx-field",
+]
 
 [[package]]
 name = "wx-radar"
 version = "0.1.0"
+dependencies = [
+ "wx-field",
+]
 
 [[package]]
 name = "wx-render"
 version = "0.1.0"
+dependencies = [
+ "rustmet-core",
+ "wx-field",
+]
 
 [[package]]
 name = "x11-dl"

@@ -42,3 +42,6 @@ rayon = "1"
 
 # Shared field types and projections
 wx-field = { path = "../wx-field" }
+
+# Meteorological computations
+wx-math = { path = "../wx-math" }

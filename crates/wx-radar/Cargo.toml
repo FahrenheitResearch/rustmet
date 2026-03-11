@@ -7,3 +7,4 @@ license = "MIT"
 authors = ["Fahrenheit Research"]
 
 [dependencies]
+wx-field = { path = "../wx-field" }
