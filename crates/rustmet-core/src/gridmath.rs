@@ -467,7 +467,7 @@ mod tests {
             for i in 0..nx {
                 lats[j * nx + i] = 44.0 + j as f64;
                 lons[j * nx + i] = -90.0 + i as f64;
-                vals[j * nx + i] = (44.0 + j as f64); // scalar = latitude
+                vals[j * nx + i] = 44.0 + j as f64; // scalar = latitude
             }
         }
         let (dfdx, dfdy) = geospatial_gradient(&vals, &lats, &lons, nx, ny);
@@ -510,6 +510,238 @@ mod tests {
         let lap = geospatial_laplacian(&vals, &lats, &lons, nx, ny);
         for &v in &lap {
             assert!(v.abs() < 1e-15, "laplacian of constant = {}", v);
+        }
+    }
+
+    // =========================================================================
+    // First derivative on polynomial (x^2 -> 2x)
+    // =========================================================================
+
+    #[test]
+    fn test_first_derivative_x_squared() {
+        // f(i) = (i*dx)^2, df/dx = 2*i*dx
+        // With dx=1: f = i^2, df/dx = 2*i (exact for centered differences on quadratic)
+        let nx = 9;
+        let ny = 1;
+        let dx = 1.0;
+        let mut vals = vec![0.0; nx];
+        for i in 0..nx {
+            vals[i] = (i as f64) * (i as f64);
+        }
+        let deriv = first_derivative(&vals, dx, 0, nx, ny);
+        // Interior points: centered difference on x^2 is exact => 2*i
+        for i in 1..nx - 1 {
+            let expected = 2.0 * i as f64;
+            assert!(
+                (deriv[i] - expected).abs() < 1e-10,
+                "d(x^2)/dx at i={}: got={}, expected={}",
+                i, deriv[i], expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_first_derivative_x_squared_with_spacing() {
+        // f(x) = x^2 where x = i*h, h = 0.25
+        // df/dx = 2x = 2*i*h
+        let nx = 11;
+        let ny = 1;
+        let h = 0.25;
+        let mut vals = vec![0.0; nx];
+        for i in 0..nx {
+            let x = i as f64 * h;
+            vals[i] = x * x;
+        }
+        let deriv = first_derivative(&vals, h, 0, nx, ny);
+        for i in 1..nx - 1 {
+            let x = i as f64 * h;
+            let expected = 2.0 * x;
+            assert!(
+                (deriv[i] - expected).abs() < 1e-10,
+                "d(x^2)/dx at x={}: got={}, expected={}",
+                x, deriv[i], expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_first_derivative_cubic() {
+        // f(x) = x^3, df/dx = 3x^2
+        // Centered differences on cubic are exact (3-point stencil is exact for
+        // polynomials up to degree 2, but for x^3 the centered diff gives
+        // ((x+h)^3 - (x-h)^3)/(2h) = 3x^2 + h^2, so the error is h^2).
+        // With h=0.1, error is 0.01. Use a tolerance that accounts for this.
+        let nx = 21;
+        let ny = 1;
+        let h = 0.1;
+        let mut vals = vec![0.0; nx];
+        for i in 0..nx {
+            let x = i as f64 * h;
+            vals[i] = x * x * x;
+        }
+        let deriv = first_derivative(&vals, h, 0, nx, ny);
+        // Interior centered-difference error for x^3 is exactly h^2 = 0.01
+        for i in 1..nx - 1 {
+            let x = i as f64 * h;
+            let expected = 3.0 * x * x;
+            assert!(
+                (deriv[i] - expected).abs() < h * h + 1e-10,
+                "d(x^3)/dx at x={:.1}: got={}, expected={}, tol={}",
+                x, deriv[i], expected, h * h
+            );
+        }
+    }
+
+    // =========================================================================
+    // Second derivative on polynomial (x^2 -> 2)
+    // =========================================================================
+
+    #[test]
+    fn test_second_derivative_x_squared_exact() {
+        // f = x^2, d2f/dx2 = 2 (exact for centered second difference)
+        let nx = 11;
+        let ny = 3;
+        let h = 0.5;
+        let mut vals = vec![0.0; nx * ny];
+        for j in 0..ny {
+            for i in 0..nx {
+                let x = i as f64 * h;
+                vals[j * nx + i] = x * x;
+            }
+        }
+        let d2 = second_derivative(&vals, h, 0, nx, ny);
+        // All points (boundary stencils are also exact for quadratics)
+        for j in 0..ny {
+            for i in 0..nx {
+                assert!(
+                    (d2[j * nx + i] - 2.0).abs() < 1e-10,
+                    "d2(x^2)/dx2 at ({},{}): got={}, expected=2.0",
+                    i, j, d2[j * nx + i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_second_derivative_cubic() {
+        // f = x^3, d2f/dx2 = 6x (exact for centered differences on cubic)
+        let nx = 9;
+        let ny = 1;
+        let h = 1.0;
+        let mut vals = vec![0.0; nx];
+        for i in 0..nx {
+            let x = i as f64 * h;
+            vals[i] = x * x * x;
+        }
+        let d2 = second_derivative(&vals, h, 0, nx, ny);
+        // Interior: centered second difference of x^3 is exactly 6x
+        for i in 1..nx - 1 {
+            let x = i as f64 * h;
+            let expected = 6.0 * x;
+            assert!(
+                (d2[i] - expected).abs() < 1e-10,
+                "d2(x^3)/dx2 at x={}: got={}, expected={}",
+                x, d2[i], expected
+            );
+        }
+    }
+
+    // =========================================================================
+    // Geospatial gradient on a tilted plane
+    // =========================================================================
+
+    #[test]
+    fn test_geospatial_gradient_tilted_plane_lat() {
+        // scalar = latitude => df/dx = 0, df/dy = 1/(dy_meters)
+        // On a uniform lat/lon grid, dy ~ 111km per degree
+        let nx = 5;
+        let ny = 5;
+        let n = nx * ny;
+        let mut lats = vec![0.0; n];
+        let mut lons = vec![0.0; n];
+        let mut vals = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                lats[j * nx + i] = 40.0 + j as f64;
+                lons[j * nx + i] = -90.0 + i as f64;
+                vals[j * nx + i] = 40.0 + j as f64; // scalar = latitude
+            }
+        }
+        let (dfdx, dfdy) = geospatial_gradient(&vals, &lats, &lons, nx, ny);
+
+        // Interior df/dx should be ~0
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    dfdx[j * nx + i].abs() < 1e-10,
+                    "dfdx at ({},{}) = {}, expected ~0",
+                    i, j, dfdx[j * nx + i]
+                );
+            }
+        }
+
+        // Interior df/dy should be ~1/111130 = ~9e-6 per meter
+        let expected_dfdy = 1.0 / 111_130.0;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                let rel_err = (dfdy[j * nx + i] - expected_dfdy).abs() / expected_dfdy;
+                assert!(
+                    rel_err < 0.02,
+                    "dfdy at ({},{}) = {:.3e}, expected ~{:.3e}, rel_err={}",
+                    i, j, dfdy[j * nx + i], expected_dfdy, rel_err
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_geospatial_gradient_tilted_plane_lon() {
+        // scalar = longitude => df/dy = 0, df/dx = 1/(dx_meters)
+        // At 45N, dx ~ 78.6km per degree of longitude
+        let nx = 5;
+        let ny = 5;
+        let n = nx * ny;
+        let mut lats = vec![0.0; n];
+        let mut lons = vec![0.0; n];
+        let mut vals = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                lats[j * nx + i] = 44.0 + j as f64;
+                lons[j * nx + i] = -90.0 + i as f64;
+                vals[j * nx + i] = -90.0 + i as f64; // scalar = longitude
+            }
+        }
+        let (dfdx, dfdy) = geospatial_gradient(&vals, &lats, &lons, nx, ny);
+
+        // Interior df/dy should be ~0
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    dfdy[j * nx + i].abs() < 1e-10,
+                    "dfdy at ({},{}) = {}, expected ~0",
+                    i, j, dfdy[j * nx + i]
+                );
+            }
+        }
+
+        // Interior df/dx should be 1/(local_dx in meters)
+        // At ~45N, 1 degree longitude ~ 78.6 km
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                // dfdx should be positive and on order of 1/78600
+                assert!(
+                    dfdx[j * nx + i] > 0.0,
+                    "dfdx at ({},{}) = {} should be positive",
+                    i, j, dfdx[j * nx + i]
+                );
+                let approx_expected = 1.0 / 78_600.0;
+                let rel_err = (dfdx[j * nx + i] - approx_expected).abs() / approx_expected;
+                assert!(
+                    rel_err < 0.05,
+                    "dfdx at ({},{}) = {:.3e}, expected ~{:.3e}, rel_err={}",
+                    i, j, dfdx[j * nx + i], approx_expected, rel_err
+                );
+            }
         }
     }
 }

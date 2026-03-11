@@ -1,15 +1,40 @@
+# Benchmark workflow -- runs Criterion benchmarks including 400x400 smoothing.
+#
+# This does NOT fail on regressions; it only records timings for visibility.
+# Use the validation workflow for correctness gates.
+
 name: Benchmarks
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   benchmark:
+    name: Criterion benchmarks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Run benchmarks
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      # Run all benchmark groups: metfuncs, dynamics, smoothing (200x200 + 400x400),
+      # grib2_roundtrip, and search.
+      - name: Run Criterion benchmarks
         run: cargo bench -- --output-format bencher 2>&1 | tee bench_output.txt
+
+      - name: Upload benchmark output
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench_output.txt
+          retention-days: 30

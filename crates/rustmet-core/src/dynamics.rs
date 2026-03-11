@@ -896,4 +896,212 @@ mod tests {
             }
         }
     }
+
+    // =========================================================================
+    // Vorticity on solid body rotation (comprehensive)
+    // =========================================================================
+
+    #[test]
+    fn test_vorticity_solid_rotation_scaled() {
+        // u = -omega*y, v = omega*x => vort = 2*omega
+        // Use omega = 3.5 and dx=dy=100m
+        let omega = 3.5;
+        let nx = 7;
+        let ny = 7;
+        let n = nx * ny;
+        let dx = 100.0;
+        let dy = 100.0;
+        let mut u = vec![0.0; n];
+        let mut v = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                let x = i as f64 * dx;
+                let y = j as f64 * dy;
+                u[j * nx + i] = -omega * y;
+                v[j * nx + i] = omega * x;
+            }
+        }
+        let vort = vorticity(&u, &v, nx, ny, dx, dy);
+        // All interior points should have vorticity = 2*omega
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    (vort[j * nx + i] - 2.0 * omega).abs() < 1e-10,
+                    "vorticity at ({},{}) = {}, expected {}",
+                    i, j, vort[j * nx + i], 2.0 * omega
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_vorticity_irrotational_field() {
+        // u = x, v = y (pure divergence, no rotation) => vort = 0
+        let nx = 5;
+        let ny = 5;
+        let n = nx * ny;
+        let mut u = vec![0.0; n];
+        let mut v = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                u[j * nx + i] = i as f64;
+                v[j * nx + i] = j as f64;
+            }
+        }
+        let vort = vorticity(&u, &v, nx, ny, 1.0, 1.0);
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    vort[j * nx + i].abs() < 1e-10,
+                    "vorticity of irrotational field at ({},{}) = {}, expected 0",
+                    i, j, vort[j * nx + i]
+                );
+            }
+        }
+    }
+
+    // =========================================================================
+    // Divergence on expanding/contracting fields
+    // =========================================================================
+
+    #[test]
+    fn test_divergence_contracting() {
+        // u = -x, v = -y => div = -2
+        let nx = 7;
+        let ny = 7;
+        let n = nx * ny;
+        let mut u = vec![0.0; n];
+        let mut v = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                u[j * nx + i] = -(i as f64);
+                v[j * nx + i] = -(j as f64);
+            }
+        }
+        let div = divergence(&u, &v, nx, ny, 1.0, 1.0);
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    (div[j * nx + i] - (-2.0)).abs() < 1e-10,
+                    "divergence at ({},{}) = {}, expected -2.0",
+                    i, j, div[j * nx + i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_divergence_scaled_expanding() {
+        // u = alpha*x, v = beta*y => div = alpha + beta
+        let alpha = 2.5;
+        let beta = 1.3;
+        let nx = 7;
+        let ny = 7;
+        let n = nx * ny;
+        let dx = 50.0;
+        let dy = 50.0;
+        let mut u = vec![0.0; n];
+        let mut v = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                let x = i as f64 * dx;
+                let y = j as f64 * dy;
+                u[j * nx + i] = alpha * x;
+                v[j * nx + i] = beta * y;
+            }
+        }
+        let div = divergence(&u, &v, nx, ny, dx, dy);
+        let expected = alpha + beta;
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    (div[j * nx + i] - expected).abs() < 1e-10,
+                    "divergence at ({},{}) = {}, expected {}",
+                    i, j, div[j * nx + i], expected
+                );
+            }
+        }
+    }
+
+    // =========================================================================
+    // Curl of gradient = 0
+    // =========================================================================
+
+    #[test]
+    fn test_curl_of_gradient_is_zero() {
+        // For any smooth scalar field phi, curl(grad(phi)) = 0.
+        // phi = x^2 + 3*x*y + y^2
+        // grad_x = 2x + 3y, grad_y = 3x + 2y
+        // curl = d(grad_y)/dx - d(grad_x)/dy = 3 - 3 = 0
+        let nx = 9;
+        let ny = 9;
+        let n = nx * ny;
+        let dx = 1.0;
+        let dy = 1.0;
+
+        // Compute grad(phi) analytically
+        let mut grad_x_field = vec![0.0; n];
+        let mut grad_y_field = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                let x = i as f64;
+                let y = j as f64;
+                grad_x_field[j * nx + i] = 2.0 * x + 3.0 * y;
+                grad_y_field[j * nx + i] = 3.0 * x + 2.0 * y;
+            }
+        }
+
+        // curl = d(grad_y)/dx - d(grad_x)/dy
+        let vort = vorticity(&grad_x_field, &grad_y_field, nx, ny, dx, dy);
+        // Note: vorticity computes dv/dx - du/dy, where we pass u=grad_x, v=grad_y
+        // So it computes d(grad_y)/dx - d(grad_x)/dy = curl(grad(phi))
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                assert!(
+                    vort[j * nx + i].abs() < 1e-10,
+                    "curl(grad(phi)) at ({},{}) = {}, expected 0",
+                    i, j, vort[j * nx + i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_curl_of_gradient_cubic() {
+        // phi = x^3 + y^3 + x*y^2
+        // grad_x = 3x^2 + y^2, grad_y = 3y^2 + 2xy
+        // d(grad_y)/dx = 2y, d(grad_x)/dy = 2y => curl = 0
+        let nx = 11;
+        let ny = 11;
+        let n = nx * ny;
+        let dx = 0.5;
+        let dy = 0.5;
+
+        let mut phi = vec![0.0; n];
+        for j in 0..ny {
+            for i in 0..nx {
+                let x = i as f64 * dx;
+                let y = j as f64 * dy;
+                phi[j * nx + i] = x * x * x + y * y * y + x * y * y;
+            }
+        }
+
+        // Compute gradient numerically
+        let grad_x_num = gradient_x(&phi, nx, ny, dx);
+        let grad_y_num = gradient_y(&phi, nx, ny, dy);
+
+        // Curl of numerical gradient
+        let curl = vorticity(&grad_x_num, &grad_y_num, nx, ny, dx, dy);
+
+        // Interior points (away from boundaries where finite differences are less accurate)
+        for j in 2..ny - 2 {
+            for i in 2..nx - 2 {
+                assert!(
+                    curl[j * nx + i].abs() < 1e-6,
+                    "curl(grad(phi)) at ({},{}) = {}, expected ~0",
+                    i, j, curl[j * nx + i]
+                );
+            }
+        }
+    }
 }

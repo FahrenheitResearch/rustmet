@@ -929,6 +929,14 @@ def write_grib2(path, messages):
     writer.write(str(path))
 
 
+# ---------------------------------------------------------------------------
+# xarray and helper submodules (lazy imports for optional dependencies)
+# ---------------------------------------------------------------------------
+
+from rustmet.rustmet_xarray import open_grib2, messages_to_dataset, open_like_cfgrib
+from rustmet.rustmet_helpers import quick_plot, compare_to_eccodes
+
+
 def _level_type_from_string(level_type_str):
     """Map level type string back to GRIB2 code."""
     mapping = {
@@ -1162,4 +1170,11 @@ __all__ = [
     "available_hours",
     "available_models",
     "model_data_sources",
+    # xarray integration (rustmet_xarray)
+    "open_grib2",
+    "messages_to_dataset",
+    "open_like_cfgrib",
+    # Convenience helpers (rustmet_helpers)
+    "quick_plot",
+    "compare_to_eccodes",
 ]

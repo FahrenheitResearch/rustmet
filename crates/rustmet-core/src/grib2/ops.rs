@@ -1204,4 +1204,220 @@ mod tests {
             smoothed[12]
         );
     }
+
+    // =========================================================================
+    // smooth_gaussian: sigma=0 returns input unchanged
+    // =========================================================================
+
+    #[test]
+    fn test_smooth_gaussian_sigma_zero() {
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let result = smooth_gaussian(&values, 3, 3, 0.0);
+        for (i, (&orig, &smoothed)) in values.iter().zip(result.iter()).enumerate() {
+            assert!(
+                (orig - smoothed).abs() < 1e-10,
+                "sigma=0: index {}: orig={}, smoothed={}",
+                i, orig, smoothed
+            );
+        }
+    }
+
+    #[test]
+    fn test_smooth_gaussian_negative_sigma() {
+        // Negative sigma should also return input unchanged (same as sigma=0)
+        let values = vec![10.0, 20.0, 30.0, 40.0];
+        let result = smooth_gaussian(&values, 2, 2, -1.0);
+        for (i, (&orig, &smoothed)) in values.iter().zip(result.iter()).enumerate() {
+            assert!(
+                (orig - smoothed).abs() < 1e-10,
+                "sigma<0: index {}: orig={}, smoothed={}",
+                i, orig, smoothed
+            );
+        }
+    }
+
+    // =========================================================================
+    // smooth_gaussian: constant field returns the same constant
+    // =========================================================================
+
+    #[test]
+    fn test_smooth_gaussian_constant_field() {
+        let val = 42.0;
+        let nx = 7;
+        let ny = 7;
+        let values = vec![val; nx * ny];
+        let result = smooth_gaussian(&values, nx, ny, 2.0);
+        for (i, &v) in result.iter().enumerate() {
+            assert!(
+                (v - val).abs() < 1e-10,
+                "constant field: index {}: got={}, expected={}",
+                i, v, val
+            );
+        }
+    }
+
+    #[test]
+    fn test_smooth_gaussian_constant_large_sigma() {
+        // Even with a very large sigma, a constant field should remain constant
+        let val = -7.5;
+        let nx = 10;
+        let ny = 10;
+        let values = vec![val; nx * ny];
+        let result = smooth_gaussian(&values, nx, ny, 10.0);
+        for (i, &v) in result.iter().enumerate() {
+            assert!(
+                (v - val).abs() < 1e-9,
+                "constant/large sigma: index {}: got={}, expected={}",
+                i, v, val
+            );
+        }
+    }
+
+    // =========================================================================
+    // smooth_gaussian: preserves mean (interior)
+    // =========================================================================
+
+    #[test]
+    fn test_smooth_gaussian_preserves_mean_interior() {
+        // Gaussian smoothing preserves the global sum for interior pixels
+        // (boundary renormalization can shift things slightly).
+        // Use a large enough grid that interior dominates.
+        let nx = 21;
+        let ny = 21;
+        let n = nx * ny;
+        let mut values = vec![0.0; n];
+        // Create a pattern
+        for j in 0..ny {
+            for i in 0..nx {
+                values[j * nx + i] = ((i + j) as f64).sin() * 10.0;
+            }
+        }
+        let sigma = 1.5;
+        let result = smooth_gaussian(&values, nx, ny, sigma);
+
+        // Compare mean of interior (skip 4 pixels of border)
+        let border = 4;
+        let mut sum_orig = 0.0;
+        let mut sum_smooth = 0.0;
+        let mut count = 0;
+        for j in border..ny - border {
+            for i in border..nx - border {
+                sum_orig += values[j * nx + i];
+                sum_smooth += result[j * nx + i];
+                count += 1;
+            }
+        }
+        let mean_orig = sum_orig / count as f64;
+        let mean_smooth = sum_smooth / count as f64;
+        assert!(
+            (mean_orig - mean_smooth).abs() < 0.1,
+            "mean not preserved: orig={}, smooth={}",
+            mean_orig, mean_smooth
+        );
+    }
+
+    // =========================================================================
+    // smooth_gaussian: NaN handling
+    // =========================================================================
+
+    #[test]
+    fn test_smooth_gaussian_nan_isolated() {
+        // A single NaN in the middle should not spread to fill the entire output.
+        let nx = 5;
+        let ny = 5;
+        let n = nx * ny;
+        let mut values = vec![1.0; n];
+        values[12] = f64::NAN; // center
+        let result = smooth_gaussian(&values, nx, ny, 1.0);
+
+        // Corners should still be finite (far from NaN)
+        assert!(result[0].is_finite(), "corner (0,0) should be finite");
+        assert!(result[4].is_finite(), "corner (4,0) should be finite");
+        assert!(result[20].is_finite(), "corner (0,4) should be finite");
+        assert!(result[24].is_finite(), "corner (4,4) should be finite");
+    }
+
+    #[test]
+    fn test_smooth_gaussian_all_nan() {
+        // All NaN input should return all NaN
+        let nx = 3;
+        let ny = 3;
+        let values = vec![f64::NAN; nx * ny];
+        let result = smooth_gaussian(&values, nx, ny, 1.0);
+        for (i, &v) in result.iter().enumerate() {
+            assert!(v.is_nan(), "all-NaN: index {} should be NaN, got {}", i, v);
+        }
+    }
+
+    #[test]
+    fn test_smooth_gaussian_nan_does_not_corrupt_distant() {
+        // Place NaN at (0,0); check that far corner (nx-1, ny-1) is unaffected
+        let nx = 11;
+        let ny = 11;
+        let n = nx * ny;
+        let mut values = vec![5.0; n];
+        values[0] = f64::NAN;
+        let result = smooth_gaussian(&values, nx, ny, 1.0);
+        let far_corner = result[(ny - 1) * nx + (nx - 1)];
+        assert!(
+            far_corner.is_finite() && (far_corner - 5.0).abs() < 0.1,
+            "far corner should be ~5.0, got {}",
+            far_corner
+        );
+    }
+
+    // =========================================================================
+    // merge, subset, filter additional tests
+    // =========================================================================
+
+    #[test]
+    fn test_merge_empty() {
+        let merged = merge(&[]);
+        assert_eq!(merged.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_subset_empty_indices() {
+        let vals = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let f = make_file(3, &vals);
+        let sub = subset(&f, &[]);
+        assert_eq!(sub.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_filter_none_match() {
+        let vals = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let f = make_file(3, &vals);
+        let filtered = filter(&f, |_| false);
+        assert_eq!(filtered.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_filter_all_match() {
+        let vals = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let f = make_file(4, &vals);
+        let filtered = filter(&f, |_| true);
+        assert_eq!(filtered.messages.len(), 4);
+    }
+
+    #[test]
+    fn test_field_diff_basic() {
+        let a = vec![5.0, 10.0, 15.0];
+        let b = vec![1.0, 2.0, 3.0];
+        let diff = field_diff(&a, &b);
+        assert!((diff[0] - 4.0).abs() < 1e-10);
+        assert!((diff[1] - 8.0).abs() < 1e-10);
+        assert!((diff[2] - 12.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_field_stats_with_nan_extended() {
+        let values = vec![1.0, f64::NAN, 3.0, f64::NAN, 5.0];
+        let stats = field_stats(&values);
+        assert_eq!(stats.count, 3);
+        assert_eq!(stats.nan_count, 2);
+        assert!((stats.min - 1.0).abs() < 1e-10);
+        assert!((stats.max - 5.0).abs() < 1e-10);
+        assert!((stats.mean - 3.0).abs() < 1e-10);
+    }
 }

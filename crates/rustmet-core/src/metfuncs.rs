@@ -2699,4 +2699,300 @@ mod tests {
         //         = 0.5 * (1.26 + 1.26 + 5.04 + 5.04) / 4 = 0.5 * 3.15 = 1.575
         assert!((tke_val - 1.575).abs() < 0.01, "TKE = {tke_val}");
     }
+
+    // =========================================================================
+    // Bolton SVP comprehensive tests
+    // =========================================================================
+
+    #[test]
+    fn test_svp_bolton_known_values() {
+        // Bolton (1980): es = 6.112 * exp(17.67*T / (T + 243.5))
+        // Compute expected values directly from the formula.
+        let cases: &[(f64, &str)] = &[
+            (-40.0, "-40C"),
+            (-20.0, "-20C"),
+            (0.0,   "0C"),
+            (10.0,  "10C"),
+            (20.0,  "20C"),
+            (25.0,  "25C"),
+            (30.0,  "30C"),
+            (40.0,  "40C"),
+        ];
+        for &(t, label) in cases {
+            let got = saturation_vapor_pressure(t);
+            let expected = 6.112 * ((17.67 * t) / (t + 243.5)).exp();
+            assert!(
+                (got - expected).abs() < 1e-10,
+                "SVP at {label}: got={got}, expected={expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_svp_bolton_monotonic() {
+        // SVP must strictly increase with temperature
+        let temps = [-40.0, -20.0, 0.0, 10.0, 20.0, 30.0, 40.0];
+        for i in 0..temps.len() - 1 {
+            let es_lo = saturation_vapor_pressure(temps[i]);
+            let es_hi = saturation_vapor_pressure(temps[i + 1]);
+            assert!(
+                es_hi > es_lo,
+                "SVP not monotonic: es({})={} >= es({})={}",
+                temps[i], es_lo, temps[i + 1], es_hi
+            );
+        }
+    }
+
+    #[test]
+    fn test_svp_bolton_physical_values() {
+        // Check against well-known physical reference values (WMO)
+        // At 0C: ~6.11 hPa, at 20C: ~23.4 hPa, at 30C: ~42.4 hPa
+        assert!((saturation_vapor_pressure(0.0) - 6.112).abs() < 0.01);
+        assert!((saturation_vapor_pressure(20.0) - 23.39).abs() < 0.1);
+        assert!((saturation_vapor_pressure(30.0) - 42.43).abs() < 0.1);
+    }
+
+    // =========================================================================
+    // Saturation mixing ratio comprehensive tests
+    // =========================================================================
+
+    #[test]
+    fn test_saturation_mixing_ratio_known_values() {
+        // ws = EPS * es / (p - es) * 1000 (g/kg), with es from Bolton
+        // At 1000 hPa, 0C: es=6.112, ws = 0.62197*6.112/(1000-6.112)*1000 = 3.822 g/kg
+        let ws_0 = saturation_mixing_ratio(1000.0, 0.0);
+        let es_0 = saturation_vapor_pressure(0.0);
+        let expected_0 = EPS * es_0 / (1000.0 - es_0) * 1000.0;
+        assert!(
+            (ws_0 - expected_0).abs() < 1e-10,
+            "ws at 1000hPa/0C: got={ws_0}, expected={expected_0}"
+        );
+
+        // At 850 hPa, 10C
+        let ws_850 = saturation_mixing_ratio(850.0, 10.0);
+        let es_10 = saturation_vapor_pressure(10.0);
+        let expected_850 = EPS * es_10 / (850.0 - es_10) * 1000.0;
+        assert!(
+            (ws_850 - expected_850).abs() < 1e-10,
+            "ws at 850hPa/10C: got={ws_850}, expected={expected_850}"
+        );
+
+        // At 500 hPa, -20C
+        let ws_500 = saturation_mixing_ratio(500.0, -20.0);
+        let es_m20 = saturation_vapor_pressure(-20.0);
+        let expected_500 = EPS * es_m20 / (500.0 - es_m20) * 1000.0;
+        assert!(
+            (ws_500 - expected_500).abs() < 1e-10,
+            "ws at 500hPa/-20C: got={ws_500}, expected={expected_500}"
+        );
+    }
+
+    #[test]
+    fn test_saturation_mixing_ratio_increases_with_temp() {
+        // At fixed pressure, ws must increase with temperature
+        let p = 1000.0;
+        let temps = [-20.0, 0.0, 10.0, 20.0, 30.0];
+        for i in 0..temps.len() - 1 {
+            let ws_lo = saturation_mixing_ratio(p, temps[i]);
+            let ws_hi = saturation_mixing_ratio(p, temps[i + 1]);
+            assert!(ws_hi > ws_lo);
+        }
+    }
+
+    #[test]
+    fn test_saturation_mixing_ratio_decreases_with_pressure() {
+        // At fixed temperature, ws must increase as pressure decreases
+        let t = 20.0;
+        let pressures = [1000.0, 850.0, 700.0, 500.0];
+        for i in 0..pressures.len() - 1 {
+            let ws_hi_p = saturation_mixing_ratio(pressures[i], t);
+            let ws_lo_p = saturation_mixing_ratio(pressures[i + 1], t);
+            assert!(ws_lo_p > ws_hi_p);
+        }
+    }
+
+    // =========================================================================
+    // Dewpoint roundtrip tests
+    // =========================================================================
+
+    #[test]
+    fn test_dewpoint_from_rh_roundtrip_comprehensive() {
+        // For various (T, RH) pairs, compute Td then recover RH
+        let cases: &[(f64, f64)] = &[
+            (-20.0, 50.0),
+            (-10.0, 30.0),
+            (0.0, 60.0),
+            (10.0, 70.0),
+            (20.0, 50.0),
+            (25.0, 80.0),
+            (30.0, 40.0),
+            (35.0, 90.0),
+            (40.0, 20.0),
+        ];
+        for &(t, rh) in cases {
+            let td = dewpoint_from_rh(t, rh);
+            let rh_back = rh_from_dewpoint(t, td);
+            assert!(
+                (rh_back - rh).abs() < 0.01,
+                "Roundtrip failed at T={t}, RH={rh}: Td={td}, RH_back={rh_back}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_dewpoint_less_than_or_equal_to_temp() {
+        // Dewpoint must always be <= temperature for RH <= 100%
+        let cases: &[(f64, f64)] = &[
+            (-20.0, 50.0), (0.0, 80.0), (20.0, 30.0), (35.0, 95.0),
+        ];
+        for &(t, rh) in cases {
+            let td = dewpoint_from_rh(t, rh);
+            assert!(td <= t + 1e-10, "Td={td} > T={t} at RH={rh}");
+        }
+    }
+
+    // =========================================================================
+    // Heat index tests
+    // =========================================================================
+
+    #[test]
+    fn test_heat_index_90f_80rh() {
+        // NWS reference: at 90F, 80% RH, heat index ~ 113F
+        // The Rothfusz regression gives a specific value
+        let hi = heat_index(90.0, 80.0);
+        // NWS chart value is approximately 113F
+        assert!(
+            (hi - 113.0).abs() < 2.0,
+            "Heat index at 90F/80%RH: got={hi}, expected ~113"
+        );
+    }
+
+    #[test]
+    fn test_heat_index_below_80f() {
+        // Below 80F, uses simple formula: 0.5*(T + 61 + (T-68)*1.2 + RH*0.094)
+        let hi = heat_index(70.0, 50.0);
+        let expected = 0.5 * (70.0 + 61.0 + (70.0 - 68.0) * 1.2 + 50.0 * 0.094);
+        assert!(
+            (hi - expected).abs() < 1e-10,
+            "Heat index at 70F/50%: got={hi}, expected={expected}"
+        );
+    }
+
+    #[test]
+    fn test_heat_index_at_low_rh_high_temp() {
+        // Low humidity adjustment regime: RH < 13%, 80F <= T <= 112F
+        let hi = heat_index(100.0, 10.0);
+        // Should be lower than Rothfusz alone due to negative adjustment
+        let rothfusz = -42.379
+            + 2.04901523 * 100.0
+            + 10.14333127 * 10.0
+            - 0.22475541 * 100.0 * 10.0
+            - 6.83783e-3 * 100.0 * 100.0
+            - 5.481717e-2 * 10.0 * 10.0
+            + 1.22874e-3 * 100.0 * 100.0 * 10.0
+            + 8.5282e-4 * 100.0 * 10.0 * 10.0
+            - 1.99e-6 * 100.0 * 100.0 * 10.0 * 10.0;
+        assert!(hi < rothfusz, "Low-RH adjustment should reduce heat index");
+    }
+
+    #[test]
+    fn test_heat_index_increases_with_rh() {
+        // At fixed high temperature, heat index should increase with RH
+        let hi_40 = heat_index(95.0, 40.0);
+        let hi_60 = heat_index(95.0, 60.0);
+        let hi_80 = heat_index(95.0, 80.0);
+        assert!(hi_60 > hi_40);
+        assert!(hi_80 > hi_60);
+    }
+
+    // =========================================================================
+    // Wind chill tests
+    // =========================================================================
+
+    #[test]
+    fn test_windchill_known_value() {
+        // NWS wind chill chart: 0F, 15 mph => wind chill ~ -19F
+        let wc = windchill(0.0, 15.0);
+        assert!(
+            (wc - (-19.0)).abs() < 1.5,
+            "Wind chill at 0F/15mph: got={wc}, expected ~-19"
+        );
+    }
+
+    #[test]
+    fn test_windchill_returns_temp_when_warm() {
+        // Above 50F, windchill returns the temperature unchanged
+        let wc = windchill(60.0, 20.0);
+        assert!((wc - 60.0).abs() < 1e-10, "Above 50F, should return T");
+    }
+
+    #[test]
+    fn test_windchill_returns_temp_when_calm() {
+        // Below 3 mph wind, windchill returns the temperature unchanged
+        let wc = windchill(20.0, 2.0);
+        assert!((wc - 20.0).abs() < 1e-10, "Below 3mph, should return T");
+    }
+
+    #[test]
+    fn test_windchill_decreases_with_wind() {
+        // At fixed cold temperature, windchill should decrease with increasing wind
+        let wc_10 = windchill(10.0, 10.0);
+        let wc_20 = windchill(10.0, 20.0);
+        let wc_40 = windchill(10.0, 40.0);
+        assert!(wc_20 < wc_10);
+        assert!(wc_40 < wc_20);
+    }
+
+    #[test]
+    fn test_windchill_nws_table() {
+        // A few more NWS chart reference points (T in F, wind in mph)
+        // 20F / 10mph => ~9F, 10F / 20mph => ~-9F
+        let wc1 = windchill(20.0, 10.0);
+        assert!((wc1 - 9.0).abs() < 2.0, "WC at 20F/10mph: got={wc1}");
+        let wc2 = windchill(10.0, 20.0);
+        assert!((wc2 - (-9.0)).abs() < 2.0, "WC at 10F/20mph: got={wc2}");
+    }
+
+    // =========================================================================
+    // Potential temperature comprehensive tests
+    // =========================================================================
+
+    #[test]
+    fn test_potential_temperature_exact_formula() {
+        // theta = (T+273.15) * (1000/p)^0.28571426
+        let cases: &[(f64, f64, &str)] = &[
+            (1000.0, 15.0,  "1000hPa/15C"),
+            (850.0,  5.0,   "850hPa/5C"),
+            (700.0,  -5.0,  "700hPa/-5C"),
+            (500.0,  -25.0, "500hPa/-25C"),
+            (300.0,  -45.0, "300hPa/-45C"),
+            (200.0,  -55.0, "200hPa/-55C"),
+        ];
+        for &(p, t, label) in cases {
+            let got = potential_temperature(p, t);
+            let expected = (t + ZEROCNK) * (1000.0 / p).powf(ROCP);
+            assert!(
+                (got - expected).abs() < 1e-10,
+                "theta at {label}: got={got}, expected={expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_potential_temperature_at_surface_equals_t() {
+        // At 1000 hPa, theta = T (in K)
+        let theta = potential_temperature(1000.0, 20.0);
+        assert!((theta - 293.15).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_potential_temperature_increases_with_height() {
+        // For a standard atmosphere, theta should increase going up
+        // even though temperature decreases
+        let theta_1000 = potential_temperature(1000.0, 15.0);
+        let theta_850 = potential_temperature(850.0, 5.0);
+        let theta_500 = potential_temperature(500.0, -25.0);
+        assert!(theta_850 > theta_1000);
+        assert!(theta_500 > theta_850);
+    }
 }

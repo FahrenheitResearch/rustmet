@@ -1,0 +1,94 @@
+# Validation workflow -- runs Rust tests and Python correctness checks
+# against reference libraries (eccodes/cfgrib, MetPy, SciPy).
+
+name: Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Rust test suite ────────────────────────────────────────────────
+  rust-tests:
+    name: Rust tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Run full test suite
+        run: cargo test --workspace
+
+  # ── Python validation against reference libraries ──────────────────
+  python-validation:
+    name: Python validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install maturin and build rustmet wheel
+        working-directory: crates/rustmet-py
+        run: |
+          pip install maturin
+          maturin build --release
+          pip install --find-links target/wheels rustmet
+
+      # eccodes/cfgrib require the ecCodes C library.
+      # Install what we can; the validation script must tolerate missing libs.
+      - name: Install system dependencies for eccodes
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libeccodes-dev
+
+      - name: Install comparison Python libraries
+        run: |
+          pip install numpy scipy metpy
+          pip install eccodes cfgrib || echo "WARNING: eccodes/cfgrib install failed -- those checks will be skipped"
+
+      - name: Run validation benchmarks
+        run: python benchmark/validation_bench.py
+
+  # ── Summary gate -- fails the PR if any job above failed ───────────
+  validation-gate:
+    name: Validation gate
+    if: always()
+    needs: [rust-tests, python-validation]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.rust-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.python-validation.result }}" != "success" ]]; then
+            echo "One or more validation jobs failed."
+            exit 1
+          fi
+          echo "All validation checks passed."
