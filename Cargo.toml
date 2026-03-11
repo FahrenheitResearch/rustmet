@@ -7,6 +7,7 @@ members = [
     "crates/wx-math",
     "crates/wx-radar",
     "crates/wx-render",
+    "crates/wx-ui",
 ]
 exclude = ["crates/rustmet-wasm"]
 resolver = "2"
