@@ -319,54 +319,112 @@ pub fn smooth_gaussian(values: &[f64], nx: usize, ny: usize, sigma: f64) -> Vec<
         kernel[i] = w;
         ksum += w;
     }
-    // Normalize
     for k in kernel.iter_mut() {
         *k /= ksum;
     }
 
+    let has_nan = values.iter().any(|v| v.is_nan());
+
     // Separable filter: horizontal pass, then vertical pass
     let mut temp = vec![0.0; nx * ny];
 
-    // Horizontal pass
-    for j in 0..ny {
-        for i in 0..nx {
-            let mut sum = 0.0;
-            let mut wsum = 0.0;
-            for ki in 0..ksize {
-                let ii = i as isize + ki as isize - radius as isize;
-                if ii >= 0 && (ii as usize) < nx {
-                    let v = values[j * nx + ii as usize];
+    if has_nan {
+        // NaN-aware path: renormalize weights per pixel
+        // Horizontal pass
+        for j in 0..ny {
+            let row_start = j * nx;
+            for i in 0..nx {
+                let mut sum = 0.0;
+                let mut wsum = 0.0;
+                let i_min = if i >= radius { i - radius } else { 0 };
+                let i_max = (i + radius + 1).min(nx);
+                for ii in i_min..i_max {
+                    let v = values[row_start + ii];
                     if !v.is_nan() {
+                        let ki = ii + radius - i;
                         sum += v * kernel[ki];
                         wsum += kernel[ki];
                     }
                 }
+                temp[row_start + i] = if wsum > 0.0 { sum / wsum } else { f64::NAN };
             }
-            temp[j * nx + i] = if wsum > 0.0 { sum / wsum } else { f64::NAN };
         }
-    }
 
-    // Vertical pass
-    let mut result = vec![0.0; nx * ny];
-    for j in 0..ny {
+        // Vertical pass (column-order for cache, transposed accumulation)
+        let mut result = vec![0.0; nx * ny];
         for i in 0..nx {
-            let mut sum = 0.0;
-            let mut wsum = 0.0;
-            for kj in 0..ksize {
-                let jj = j as isize + kj as isize - radius as isize;
-                if jj >= 0 && (jj as usize) < ny {
-                    let v = temp[jj as usize * nx + i];
+            for j in 0..ny {
+                let mut sum = 0.0;
+                let mut wsum = 0.0;
+                let j_min = if j >= radius { j - radius } else { 0 };
+                let j_max = (j + radius + 1).min(ny);
+                for jj in j_min..j_max {
+                    let v = temp[jj * nx + i];
                     if !v.is_nan() {
+                        let kj = jj + radius - j;
                         sum += v * kernel[kj];
                         wsum += kernel[kj];
                     }
                 }
+                result[j * nx + i] = if wsum > 0.0 { sum / wsum } else { f64::NAN };
             }
-            result[j * nx + i] = if wsum > 0.0 { sum / wsum } else { f64::NAN };
         }
-    }
+        result
+    } else {
+        // Fast path: no NaN values, skip NaN checks and weight renormalization.
+        // Horizontal pass
+        for j in 0..ny {
+            let row_start = j * nx;
+            for i in 0..nx {
+                let mut sum = 0.0;
+                let i_min = if i >= radius { i - radius } else { 0 };
+                let i_max = (i + radius + 1).min(nx);
+                // Interior points: full kernel applies, no boundary check
+                if i >= radius && i + radius < nx {
+                    for ki in 0..ksize {
+                        sum += values[row_start + i - radius + ki] * kernel[ki];
+                    }
+                } else {
+                    // Boundary: renormalize
+                    let mut wsum = 0.0;
+                    for ii in i_min..i_max {
+                        let ki = ii + radius - i;
+                        sum += values[row_start + ii] * kernel[ki];
+                        wsum += kernel[ki];
+                    }
+                    sum /= wsum;
+                }
+                temp[row_start + i] = sum;
+            }
+        }
 
-    result
+        // Vertical pass — process in column order
+        let mut result = vec![0.0; nx * ny];
+        for i in 0..nx {
+            for j in 0..ny {
+                let mut sum = 0.0;
+                if j >= radius && j + radius < ny {
+                    // Interior: full kernel
+                    for kj in 0..ksize {
+                        sum += temp[(j - radius + kj) * nx + i] * kernel[kj];
+                    }
+                } else {
+                    // Boundary: renormalize
+                    let mut wsum = 0.0;
+                    let j_min = if j >= radius { j - radius } else { 0 };
+                    let j_max = (j + radius + 1).min(ny);
+                    for jj in j_min..j_max {
+                        let kj = jj + radius - j;
+                        sum += temp[jj * nx + i] * kernel[kj];
+                        wsum += kernel[kj];
+                    }
+                    sum /= wsum;
+                }
+                result[j * nx + i] = sum;
+            }
+        }
+        result
+    }
 }
 
 /// Smooth using an N-point smoother (like wgrib2's `-smooth`).
