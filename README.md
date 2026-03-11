@@ -60,6 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Benchmarks
 
+### End-to-end: fetch + decode
+
 Downloading and decoding 8 HRRR surface variables (15M grid points), median of 5 runs:
 
 | Tool | Download | Decode | Total |
@@ -70,6 +72,16 @@ Downloading and decoding 8 HRRR surface variables (15M grid points), median of 5
 | xarray + cfgrib | -- | 0.39 s | -- |
 
 rustmet is **5x faster end-to-end** than the standard Python stack. The download speedup comes from HTTP range requests with connection pooling; the decode speedup comes from a zero-copy Rust GRIB2 parser with JPEG2000 and deflate decompression.
+
+### Competitive comparison
+
+We also benchmark rustmet against cfgrib, MetPy, and scipy on equivalent operations (GRIB2 parsing, meteorological calculations, grid math). Results vary by system -- run the comparison yourself:
+
+```bash
+python benchmark/compare.py
+```
+
+The script handles missing libraries gracefully and prints a formatted table. MetPy's pint-based unit system adds overhead compared to raw numpy -- this is a deliberate design choice for dimensional safety, not a deficiency. See [benchmark/RESULTS.md](benchmark/RESULTS.md) for detailed Criterion results and comparative numbers.
 
 ## Supported Models
 
