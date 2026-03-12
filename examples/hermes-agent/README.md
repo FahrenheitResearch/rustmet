@@ -136,18 +136,18 @@ The agent will:
 | `wx_radar` | ~15 MB | NEXRAD radar composite (use sparingly) |
 | `wx_briefing` | ~15 MB | Comprehensive weather briefing |
 
-### Specialized
+### Visualization & Specialized
 
-| Tool | Description |
-|------|-------------|
-| `wx_tiles` | XYZ map tiles (~50 KB/tile) for Leaflet/Mapbox overlay |
-| `wx_rotation` | Mesocyclone/rotation detection from radar |
-| `wx_mrms` | Multi-Radar Multi-Sensor composites |
-| `wx_watchbox` | SPC watch box geometry |
-| `wx_sounding` | Upper-air sounding data |
-| `wx_sse` | Subscribe to real-time SSE event stream |
-| `wx_radar --raw` | Basemap-free radar for compositing |
-| `wx_metar --raw` | Raw METAR string, no decode |
+| Tool | Size | Description |
+|------|------|-------------|
+| `wx_tiles` | ~50 KB/tile | XYZ PNG tiles for Leaflet/Mapbox overlays |
+| `wx_radar_image` | ~200 KB | Rendered NEXRAD PPI as PNG file |
+| `wx_model_image` | ~200 KB | Rendered model field (CAPE, temp, etc.) as PNG |
+| `wx_point` | ~5 KB | Single grid-point value extraction |
+| `wx_scan` | ~10 KB | Grid extrema search (max CAPE, min pressure, etc.) |
+| `wx_timeseries` | ~20 KB | Multi-hour trend for a variable at a point |
+| `wx_sounding` | ~50 KB | HRRR/RAP model-derived convective parameters |
+| `wx_evidence` | ~30 KB | Multi-source confidence assessment (METAR vs HRRR vs NWS) |
 
 ## Skills
 

@@ -119,7 +119,7 @@ pub static WIND: &[ColorStop] = &[
 ];
 
 // ============================================================
-// Reflectivity colormap: PivotalWeather exact color table
+// Reflectivity colormap: professional NWS-style color table
 // Range: -5 to 75 dBZ (80 dBZ span)
 // ============================================================
 pub static REFLECTIVITY: &[ColorStop] = &[
@@ -450,7 +450,7 @@ pub static TEMPERATURE_NWS: &[ColorStop] = &[
 ];
 
 // ============================================================
-// Pivotal Weather style temperature (muted, professional)
+// Professional style temperature (muted tones)
 // Cool blues through greens through warm oranges/reds
 // ============================================================
 pub static TEMPERATURE_PIVOTAL: &[ColorStop] = &[
@@ -474,7 +474,7 @@ pub static TEMPERATURE_PIVOTAL: &[ColorStop] = &[
 ];
 
 // ============================================================
-// CAPE colormap (PivotalWeather style)
+// CAPE colormap (professional meteorological style)
 // Gray/white -> yellow -> orange -> red -> magenta/purple
 // Designed for 0-5000+ J/kg
 // ============================================================
@@ -494,7 +494,7 @@ pub static CAPE_PIVOTAL: &[ColorStop] = &[
 ];
 
 // ============================================================
-// Wind speed colormap (PivotalWeather style)
+// Wind speed colormap (professional meteorological style)
 // White/light -> green -> yellow -> orange -> red -> purple
 // Designed for 0-60 kt
 // ============================================================

@@ -261,7 +261,7 @@ fn build_projection(grid: &grib2::GridDefinition) -> Option<Box<dyn Projection>>
 ///
 /// Style overrides let users request alternate color schemes:
 /// - `?style=nws`      → NWS-style colors (e.g., temperature_nws)
-/// - `?style=pivotal`  → Pivotal Weather style (e.g., temperature_pivotal)
+/// - `?style=pivotal`  → Professional meteorological style (e.g., temperature_pivotal)
 /// - `?style=clean`    → Clean variant for dark backgrounds (e.g., reflectivity_clean)
 ///
 /// If the styled variant doesn't exist, falls back to the base colormap.
@@ -347,7 +347,7 @@ pub async fn generate_tile(
 ///
 /// The `style` parameter selects an alternate colormap:
 /// - `Some("nws")` → NWS-style colors
-/// - `Some("pivotal")` → Pivotal Weather style
+/// - `Some("pivotal")` → Professional meteorological style
 /// - `Some("clean")` → Clean variant for dark backgrounds
 /// - `None` → default colormap
 ///

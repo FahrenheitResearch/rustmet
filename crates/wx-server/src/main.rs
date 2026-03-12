@@ -1153,7 +1153,7 @@ async fn main() {
 
     println!("wx-server v0.1.0 starting on http://0.0.0.0:{}", port);
     println!("  Demo:   http://localhost:{}/", port);
-    println!("  Tiles:  GET /tiles/hrrr/cape/surface/f00/5/8/12.png?style=pivotal");
+    println!("  Tiles:  GET /tiles/hrrr/cape/surface/f00/5/8/12.png?style=nws");
     println!("  Legend: GET /api/legend/temperature?style=nws&vmin=-40&vmax=120");
     println!("  Contour:GET /tiles/contour/gfs/hgt/500mb/f00/4/3/5.png?interval=60");
     println!("  Surface:GET /tiles/surface/7/28/49.png");

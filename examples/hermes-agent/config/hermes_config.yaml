@@ -74,18 +74,14 @@ mcp_servers:
     #   wx_radar       - NEXRAD composite (~15MB, use sparingly)
     #   wx_briefing    - Comprehensive weather briefing (~15MB)
     #
-    # --- Tile/Visual ---
-    #   wx_tiles       - Generate XYZ map tiles for web display (~50KB per tile)
-    #                    Returns tile URLs for Leaflet/Mapbox overlay.
-    #                    Use when user wants visual radar/model data.
-    #
-    # --- Raw Data Mode ---
-    #   wx_radar (--raw)   - Basemap-free radar for compositing
-    #   wx_metar (--raw)   - Raw METAR string, no decode
+    # --- Visualization ---
+    #   wx_tiles       - Generate XYZ map tiles (~50KB per tile)
+    #   wx_radar_image - Rendered NEXRAD PPI as PNG
+    #   wx_model_image - Rendered model field as PNG
     #
     # --- Specialized ---
-    #   wx_rotation    - Mesocyclone/rotation detection from radar
-    #   wx_mrms        - Multi-Radar Multi-Sensor composites
-    #   wx_watchbox    - SPC watch box geometry
+    #   wx_point       - Single grid-point value extraction
+    #   wx_scan        - Grid extrema search (max CAPE, min pressure)
+    #   wx_timeseries  - Multi-hour trend for a variable at a point
     #   wx_sounding    - Upper-air sounding data
-    #   wx_sse         - Subscribe to real-time SSE event stream
+    #   wx_evidence    - Multi-source confidence assessment
