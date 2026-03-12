@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>wx-tools — HRRR Weather Tiles</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100vw; height: 100vh; }
+        .controls { position: absolute; top: 10px; right: 10px; z-index: 1000;
+                     background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; color: white; font-family: monospace; }
+        select, button { padding: 5px 10px; margin: 3px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="controls">
+        <h3 style="margin:0 0 10px 0">wx-tools</h3>
+        <label>Variable:
+            <select id="var-select">
+                <option value="cape">CAPE</option>
+                <option value="refc">Reflectivity</option>
+                <option value="temp">Temperature</option>
+                <option value="gust">Wind Gust</option>
+                <option value="rh">Relative Humidity</option>
+                <option value="dewpoint">Dewpoint</option>
+                <option value="vis">Visibility</option>
+                <option value="precip">Precipitation</option>
+            </select>
+        </label><br>
+        <label>Model:
+            <select id="model-select">
+                <option value="hrrr">HRRR (3km)</option>
+                <option value="gfs">GFS (0.25deg)</option>
+                <option value="rap">RAP (13km)</option>
+                <option value="nam">NAM (12km)</option>
+            </select>
+        </label><br>
+        <label>F-hour:
+            <select id="fhour-select">
+                <option value="0">f00 (Analysis)</option>
+                <option value="1">f01</option>
+                <option value="3">f03</option>
+                <option value="6">f06</option>
+                <option value="12">f12</option>
+                <option value="18">f18</option>
+            </select>
+        </label><br>
+        <button onclick="updateLayer()">Update</button>
+        <p id="status" style="margin:5px 0 0 0;font-size:12px;color:#aaa">Ready</p>
+    </div>
+
+    <script>
+        const WX_SERVER = "http://localhost:8080";
+
+        const map = L.map('map').setView([39.0, -98.0], 5); // CONUS center
+
+        // Base map
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Weather overlay
+        let wxLayer = null;
+
+        function updateLayer() {
+            const variable = document.getElementById('var-select').value;
+            const model = document.getElementById('model-select').value;
+            const fhour = document.getElementById('fhour-select').value;
+            const fhourPad = fhour.padStart(2, '0');
+
+            if (wxLayer) map.removeLayer(wxLayer);
+
+            wxLayer = L.tileLayer(`${WX_SERVER}/tiles/${model}/${variable}/surface/f${fhourPad}/{z}/{x}/{y}.png`, {
+                opacity: 0.7,
+                maxZoom: 10,
+                attribution: 'wx-tools'
+            }).addTo(map);
+
+            document.getElementById('status').textContent =
+                `Showing ${model.toUpperCase()} ${variable} f${fhourPad}`;
+        }
+
+        // Load initial layer
+        updateLayer();
+    </script>
+</body>
+</html>

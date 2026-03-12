@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  wx-server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'

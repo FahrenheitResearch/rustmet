@@ -1,0 +1,24 @@
+[Unit]
+Description=wx-server — Weather Data API and Tile Server
+After=network.target
+Documentation=https://github.com/drew/rustmet
+
+[Service]
+Type=simple
+User=wx
+Group=wx
+ExecStart=/usr/local/bin/wx-server --port 8080
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=RUST_LOG=info
+# Ensure wx-pro and wx-lite are in PATH or same directory
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Memory limit
+MemoryMax=2G
+# File descriptor limit for concurrent connections
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

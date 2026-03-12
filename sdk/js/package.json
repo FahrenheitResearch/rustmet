@@ -1,0 +1,16 @@
+{
+  "name": "wx-tools",
+  "version": "0.1.0",
+  "description": "Weather data SDK — HRRR/GFS/RAP/NAM tiles, radar, METAR, alerts, forecasts. Pure Rust backend, zero API keys.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["weather", "meteorology", "hrrr", "gfs", "radar", "tiles", "metar", "forecast", "nws"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

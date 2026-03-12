@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>wx-tools API Demo</title>
+    <style>
+        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; background: #0f3460; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #16213e; }
+        pre { background: #0f0f23; padding: 15px; border-radius: 8px; overflow-x: auto; max-height: 400px; }
+        input { padding: 5px; background: #16213e; color: white; border: 1px solid #333; }
+    </style>
+</head>
+<body>
+    <h1>wx-tools API Demo</h1>
+    <p>Server: <input id="server" value="http://localhost:8080" size="30"></p>
+    <p>
+        Lat: <input id="lat" value="35.22" size="8">
+        Lon: <input id="lon" value="-97.44" size="8">
+        Station: <input id="station" value="KOKC" size="6">
+    </p>
+    <div>
+        <button onclick="call('/api/conditions')">Conditions</button>
+        <button onclick="call('/api/forecast')">Forecast</button>
+        <button onclick="call('/api/alerts')">Alerts</button>
+        <button onclick="call('/api/metar', {station: true})">METAR</button>
+        <button onclick="call('/api/severe')">Severe</button>
+        <button onclick="call('/api/scan?var=cape&mode=max&top_n=5')">Scan CAPE</button>
+        <button onclick="call('/api/point?model=hrrr&var=cape')">Point CAPE</button>
+        <button onclick="call('/health')">Health</button>
+    </div>
+    <pre id="output">Click a button to fetch data...</pre>
+
+    <script>
+        async function call(path, opts = {}) {
+            const server = document.getElementById('server').value;
+            const lat = document.getElementById('lat').value;
+            const lon = document.getElementById('lon').value;
+            const station = document.getElementById('station').value;
+
+            let url = server + path;
+            if (!path.includes('?')) url += '?';
+            else url += '&';
+
+            if (opts.station) {
+                url += `station=${station}`;
+            } else if (!path.includes('health')) {
+                url += `lat=${lat}&lon=${lon}`;
+            }
+
+            document.getElementById('output').textContent = `Fetching ${url}...`;
+            try {
+                const resp = await fetch(url);
+                const data = await resp.json();
+                document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('output').textContent = `Error: ${e.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

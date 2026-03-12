@@ -15,6 +15,7 @@ members = [
     "crates/wx-lite",
     "crates/wx-pro",
     "crates/wx-mcp",
+    "crates/wx-server",
 ]
 exclude = ["crates/rustmet-wasm"]
 resolver = "2"
