@@ -26,6 +26,8 @@ mod cmd_scan;
 mod cmd_timeseries;
 mod cmd_evidence;
 mod cmd_tiles;
+mod cmd_storm_analysis;
+mod cmd_storm_image;
 
 use clap::{Parser, Subcommand};
 
@@ -419,6 +421,40 @@ enum Commands {
         y: Option<u32>,
     },
 
+    /// Storm cell analysis with cell identification, mesocyclone detection, and multi-frame tracking
+    #[command(allow_negative_numbers = true, name = "storm-analysis")]
+    StormAnalysis {
+        /// NEXRAD site ID (e.g., KTLX)
+        #[arg(long, default_value = "")]
+        site: String,
+        /// Latitude (finds nearest radar site)
+        #[arg(long)]
+        lat: Option<f64>,
+        /// Longitude (finds nearest radar site)
+        #[arg(long)]
+        lon: Option<f64>,
+        /// Number of frames to analyze (1-10, default: 3)
+        #[arg(long, default_value = "3")]
+        frames: usize,
+    },
+
+    /// Render storm cell analysis as a labeled PNG image (reflectivity + cell IDs + meso markers)
+    #[command(allow_negative_numbers = true, name = "storm-image")]
+    StormImage {
+        /// NEXRAD site ID (e.g., KTLX)
+        #[arg(long, default_value = "")]
+        site: String,
+        /// Latitude (finds nearest radar site)
+        #[arg(long)]
+        lat: Option<f64>,
+        /// Longitude (finds nearest radar site)
+        #[arg(long)]
+        lon: Option<f64>,
+        /// Image size in pixels (default: 800)
+        #[arg(long, default_value = "800")]
+        size: u32,
+    },
+
     /// Describe all commands for agent discovery
     #[command(name = "commands")]
     AgentHelp,
@@ -495,6 +531,12 @@ fn main() {
         }
         Commands::Tiles { model, var, level, fhour, z, x, y } => {
             cmd_tiles::run(&model, &var, &level, fhour, z, x, y, pretty);
+        }
+        Commands::StormAnalysis { site, lat, lon, frames } => {
+            cmd_storm_analysis::run(&site, lat, lon, frames, pretty);
+        }
+        Commands::StormImage { site, lat, lon, size } => {
+            cmd_storm_image::run(&site, lat, lon, size, pretty);
         }
         Commands::AgentHelp => cmd_help::run(pretty),
     }

@@ -663,6 +663,56 @@ fn tool_definitions() -> Value {
                     },
                     "required": ["var", "z"]
                 }
+            },
+            {
+                "name": "wx_storm_image",
+                "description": "Render a labeled storm cell PNG image: reflectivity PPI with cell IDs (C1, C2...), mesocyclone markers, and rotation velocities drawn on top. Returns image_path + cell data JSON. Use when you need a VISUAL of storm cells. Downloads ~10MB radar data.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "site": {
+                            "type": "string",
+                            "description": "NEXRAD site ID (e.g., KTLX, KFWS)"
+                        },
+                        "lat": {
+                            "type": "number",
+                            "description": "Latitude (finds nearest radar site)"
+                        },
+                        "lon": {
+                            "type": "number",
+                            "description": "Longitude (finds nearest radar site)"
+                        },
+                        "size": {
+                            "type": "number",
+                            "description": "Image size in pixels (default: 800)"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "wx_storm_analysis",
+                "description": "Full storm cell analysis JSON: identifies and labels individual cells (C1, C2...), detects mesocyclones, tracks cells across multiple radar frames, computes motion vectors. Use for detailed storm data. Downloads multiple NEXRAD volumes (~10-50MB depending on frames).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "site": {
+                            "type": "string",
+                            "description": "NEXRAD site ID (e.g., KTLX, KFWS)"
+                        },
+                        "lat": {
+                            "type": "number",
+                            "description": "Latitude (finds nearest radar site)"
+                        },
+                        "lon": {
+                            "type": "number",
+                            "description": "Longitude (finds nearest radar site)"
+                        },
+                        "frames": {
+                            "type": "number",
+                            "description": "Number of radar frames to analyze for tracking (1-10, default: 3)"
+                        }
+                    }
+                }
             }
         ]
     })
@@ -720,6 +770,8 @@ fn handle_tools_call(params: &Value) -> Value {
         "wx_timeseries" => call_wx_timeseries(&arguments),
         "wx_evidence" => call_wx_evidence(&arguments),
         "wx_tiles" => call_wx_tiles(&arguments),
+        "wx_storm_image" => call_wx_storm_image(&arguments),
+        "wx_storm_analysis" => call_wx_storm_analysis(&arguments),
         _ => mcp_error(&format!("Unknown tool: {}", tool_name)),
     }
 }
@@ -1123,6 +1175,66 @@ fn call_wx_tiles(args: &Value) -> Value {
         y_s = format!("{}", y as u32);
         cmd_args.extend(["--y", &y_s]);
     }
+    run_wx_pro(&cmd_args)
+}
+
+fn call_wx_storm_image(args: &Value) -> Value {
+    let mut cmd_args = vec!["storm-image"];
+    let lat_s;
+    let lon_s;
+    let size_s;
+    let mut extra: Vec<&str> = Vec::new();
+    if let Some(site) = args.get("site").and_then(|v| v.as_str()) {
+        if !site.is_empty() {
+            extra.extend(["--site", site]);
+        }
+    }
+    if let (Some(lat), Some(lon)) = (
+        args.get("lat").and_then(|v| v.as_f64()),
+        args.get("lon").and_then(|v| v.as_f64()),
+    ) {
+        lat_s = format!("{}", lat);
+        lon_s = format!("{}", lon);
+        extra.extend(["--lat", lat_s.as_str(), "--lon", lon_s.as_str()]);
+    }
+    if let Some(size) = args.get("size").and_then(|v| v.as_f64()) {
+        size_s = format!("{}", size as u32);
+        extra.extend(["--size", &size_s]);
+    }
+    if extra.is_empty() {
+        return mcp_error("Provide site or lat/lon for storm-image");
+    }
+    cmd_args.extend(extra.iter());
+    run_wx_pro(&cmd_args)
+}
+
+fn call_wx_storm_analysis(args: &Value) -> Value {
+    let mut cmd_args = vec!["storm-analysis"];
+    let lat_s;
+    let lon_s;
+    let frames_s;
+    let mut extra: Vec<&str> = Vec::new();
+    if let Some(site) = args.get("site").and_then(|v| v.as_str()) {
+        if !site.is_empty() {
+            extra.extend(["--site", site]);
+        }
+    }
+    if let (Some(lat), Some(lon)) = (
+        args.get("lat").and_then(|v| v.as_f64()),
+        args.get("lon").and_then(|v| v.as_f64()),
+    ) {
+        lat_s = format!("{}", lat);
+        lon_s = format!("{}", lon);
+        extra.extend(["--lat", lat_s.as_str(), "--lon", lon_s.as_str()]);
+    }
+    if let Some(frames) = args.get("frames").and_then(|v| v.as_f64()) {
+        frames_s = format!("{}", frames as u32);
+        extra.extend(["--frames", &frames_s]);
+    }
+    if extra.is_empty() {
+        return mcp_error("Provide site or lat/lon for storm-analysis");
+    }
+    cmd_args.extend(extra.iter());
     run_wx_pro(&cmd_args)
 }
 

@@ -14,7 +14,7 @@ Deploy an autonomous AI weather agent using [Hermes Agent](https://github.com/No
              │ MCP (stdio)
 ┌────────────▼────────────────┐
 │        wx-mcp               │
-│   20 weather tools          │
+│   22 weather tools          │
 └────────────┬────────────────┘
              │
 ┌────────────▼────────────────┐
@@ -148,7 +148,7 @@ The agent will:
 
 ## MCP Tool Reference
 
-20 tools exposed by `wx-mcp`, organized by bandwidth cost:
+22 tools exposed by `wx-mcp`, organized by bandwidth cost:
 
 ### Lightweight (< 50 KB per call)
 
@@ -189,6 +189,13 @@ The agent will:
 | `wx_timeseries` | ~20 KB | Multi-hour trend for a variable at a point |
 | `wx_sounding` | ~50 KB | HRRR/RAP model-derived convective parameters |
 | `wx_evidence` | ~30 KB | Multi-source confidence assessment (METAR vs HRRR vs NWS) |
+
+### Storm Analysis
+
+| Tool | Size | Description |
+|------|------|-------------|
+| `wx_storm_analysis` | ~50 KB | SCIT-style multi-frame cell tracking with meso association and motion vectors |
+| `wx_storm_image` | ~200 KB | Rendered storm cell PNG with labeled cells, meso markers, and legend |
 
 ## Skills
 

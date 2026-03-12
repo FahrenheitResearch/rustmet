@@ -5,6 +5,7 @@ pub mod level2;
 pub mod color_table;
 pub mod render;
 pub mod derived;
+pub mod cells;
 pub mod detection;
 pub mod sites;
 

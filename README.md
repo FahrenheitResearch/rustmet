@@ -5,7 +5,7 @@
 
 **Pure Rust weather platform — GRIB2 engine, NEXRAD radar, NWS integration, MCP tool server, and HTTP tile service. Zero C dependencies. Single static binaries.**
 
-rustmet is a 50,000+ LOC workspace of 16 crates that covers the full stack from raw GRIB2 byte decoding to AI agent tool integration. It downloads operational NWP model data (HRRR, GFS, NAM, RAP), parses NEXRAD Level 2 radar, fetches NWS alerts/forecasts/METARs, renders 256x256 XYZ map tiles with bilinear interpolation, serves them over HTTP, and exposes 20 weather tools via the Model Context Protocol (MCP) for LLM agents.
+rustmet is a 50,000+ LOC workspace of 16 crates that covers the full stack from raw GRIB2 byte decoding to AI agent tool integration. It downloads operational NWP model data (HRRR, GFS, NAM, RAP), parses NEXRAD Level 2 radar, fetches NWS alerts/forecasts/METARs, renders 256x256 XYZ map tiles with bilinear interpolation, serves them over HTTP, and exposes 22 weather tools via the Model Context Protocol (MCP) for LLM agents.
 
 ## Binaries
 
@@ -14,9 +14,9 @@ Pre-built binaries for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Win
 | Binary | Size | Description |
 |--------|------|-------------|
 | **wx** | 4.0 MB | Weather CLI — 17 commands, JSON output for agent pipelines |
-| **wx-pro** | 6.0 MB | Full-power CLI — 21 commands including MRMS composites, rotation detection, imagery rendering, watch-box geometry |
+| **wx-pro** | 6.0 MB | Full-power CLI — 23 commands including MRMS composites, rotation detection, storm cell tracking, imagery rendering, watch-box geometry |
 | **wx-lite** | 3.6 MB | Bandwidth-optimized CLI — 12 commands, response caching, Open-Meteo global coverage |
-| **wx-mcp** | 694 KB | MCP server — exposes 20 weather tools over stdio for Claude, Hermes, or any MCP client |
+| **wx-mcp** | 694 KB | MCP server — exposes 22 weather tools over stdio for Claude, Hermes, or any MCP client |
 | **wx-server** | 5.8 MB | HTTP tile server — Axum-based REST API with in-process GRIB2 rendering, SSE streaming, and a self-contained web dashboard |
 
 All binaries are statically linked with pure Rust TLS (rustls). No OpenSSL, no libc version requirements, no runtime dependencies. Copy the binary and run it.
@@ -83,6 +83,8 @@ The `wx-radar` crate parses NEXRAD WSR-88D Level 2 archive files:
 - Polar-to-cartesian tile rendering for XYZ map overlays
 - Quality-controlled max reflectivity and gate-to-gate velocity analysis
 - Rotation detection type definitions for mesocyclone identification
+- SCIT-style storm cell identification with multi-threshold watershed segmentation
+- Cell tracking across volume scans with motion vector computation
 
 Data sources: AWS S3 real-time archive and NOMADS historic scans.
 
@@ -99,7 +101,7 @@ Data sources: AWS S3 real-time archive and NOMADS historic scans.
 
 ## MCP Tool Server (wx-mcp)
 
-`wx-mcp` implements the [Model Context Protocol](https://modelcontextprotocol.io/) (version 2024-11-05) over stdio, exposing 20 weather tools to any MCP-compatible LLM agent. It auto-detects framing (Content-Length headers or JSON Lines).
+`wx-mcp` implements the [Model Context Protocol](https://modelcontextprotocol.io/) (version 2024-11-05) over stdio, exposing 22 weather tools to any MCP-compatible LLM agent. It auto-detects framing (Content-Length headers or JSON Lines).
 
 `wx-mcp` is stateless — each tool call spawns `wx-pro` or `wx-lite` as a subprocess, captures the JSON output, and returns it as an MCP text result. This means tool execution inherits all the capabilities of the full CLI.
 
@@ -144,6 +146,13 @@ Data sources: AWS S3 real-time archive and NOMADS historic scans.
 | `wx_point` | Single grid-point value extraction |
 | `wx_scan` | Grid extrema search (max CAPE, min pressure, etc.) |
 | `wx_timeseries` | Multi-hour trend for a variable at a point |
+
+**Storm Analysis**
+
+| Tool | Description |
+|------|-------------|
+| `wx_storm_analysis` | SCIT-style multi-frame cell tracking with mesocyclone association and motion vectors |
+| `wx_storm_image` | Rendered storm cell PNG with labeled cells, meso markers, info box, and legend |
 
 ### MCP Integration Example
 
@@ -276,9 +285,9 @@ rustmet/
 │   ├── rustmet-core/     # GRIB2 parser, download client, model configs, colormaps
 │   ├── rustmet-py/       # Python bindings (PyO3 + maturin)
 │   ├── wx-agent/         # wx CLI binary (17 commands)
-│   ├── wx-pro/           # wx-pro CLI binary (21 commands)
+│   ├── wx-pro/           # wx-pro CLI binary (23 commands)
 │   ├── wx-lite/          # wx-lite CLI binary (12 commands)
-│   ├── wx-mcp/           # MCP server binary (20 tools)
+│   ├── wx-mcp/           # MCP server binary (22 tools)
 │   ├── wx-server/        # HTTP tile server binary
 │   ├── wx-radar/         # NEXRAD Level 2 parser, 141 sites
 │   ├── wx-alerts/        # NWS alerts, SPC outlooks
@@ -310,7 +319,7 @@ The Docker image builds `wx-server`, `wx-pro`, and `wx-lite` in a multi-stage bu
 
 ### AI Agent Integration
 
-See `examples/hermes-agent/` for a complete deployment guide using Hermes Agent with Nemotron-3-Super-120B via OpenRouter (free tier). The agent uses `wx-mcp` to access all 20 weather tools, runs on a cron schedule, and pushes alerts via Telegram.
+See `examples/hermes-agent/` for a complete deployment guide using Hermes Agent with Nemotron-3-Super-120B via OpenRouter (free tier). The agent uses `wx-mcp` to access all 22 weather tools, runs on a cron schedule, and pushes alerts via Telegram.
 
 Architecture:
 ```

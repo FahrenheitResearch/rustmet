@@ -8,13 +8,13 @@ const NEXRAD_BASE_URL: &str = "https://unidata-nexrad-level2.s3.amazonaws.com";
 /// Rotation detection thresholds.
 const MIN_REFLECTIVITY_DBZ: f32 = 35.0;
 const TVS_SHEAR_THRESHOLD: f32 = 46.0;
-const MIN_CLUSTER_GATES: usize = 8;
-const MIN_VERTICAL_TILTS: usize = 2;
+const MIN_CLUSTER_GATES: usize = 3;
+const MIN_VERTICAL_TILTS: usize = 3;
 const MAX_HORIZONTAL_OFFSET_KM: f64 = 10.0;
 const NUM_LOW_ELEVATIONS: usize = 4;
 
 /// Rotational velocity thresholds for strength ranking (m/s).
-const STRENGTH_THRESHOLDS: [f32; 5] = [15.0, 25.0, 33.0, 46.0, 60.0];
+const STRENGTH_THRESHOLDS: [f32; 5] = [20.0, 25.0, 33.0, 46.0, 60.0];
 
 /// A candidate rotation detection from a single sweep.
 #[derive(Debug, Clone)]
@@ -243,7 +243,7 @@ fn scan_sweep(sweep: &wx_radar::level2::Level2Sweep) -> Vec<SweepDetection> {
                     continue;
                 }
 
-                let delta_v = (v2 - v1).abs();
+                let delta_v = v2 - v1; // positive = cyclonic rotation (NH)
                 let rot_vel = delta_v / 2.0;
 
                 // Minimum rotational velocity: 15 m/s
@@ -303,28 +303,111 @@ fn scan_sweep(sweep: &wx_radar::level2::Level2Sweep) -> Vec<SweepDetection> {
 
 /// Cluster nearby shear detections using union-find.
 ///
-/// Merge adjacent gates (within 2 gates azimuthally, 3 gates in range) into
+/// Merge adjacent gates (within 2° azimuthally, 0.75 km in range) into
 /// connected components. Discard clusters with fewer than MIN_CLUSTER_GATES gates.
 /// Return the centroid detection for each surviving cluster.
 fn cluster_detections(detections: &[SweepDetection]) -> Vec<SweepDetection> {
-    // TODO: Full implementation of spatial clustering.
-    //
-    // Algorithm outline:
-    // 1. Build adjacency: two detections are neighbors if:
-    //    - |azimuth_a - azimuth_b| <= 2 degrees (handle 360/0 wraparound)
-    //    - |range_a - range_b| <= 3 * gate_spacing_km
-    // 2. Union-Find:
-    //    a. Initialize each detection as its own set
-    //    b. For each pair of neighbors, union their sets
-    //    c. Collect all sets
-    // 3. For each set with >= MIN_CLUSTER_GATES members:
-    //    a. Compute centroid azimuth (circular mean) and range (arithmetic mean)
-    //    b. Take max rotational velocity and max shear from the cluster
-    //    c. Sum gate count
-    //    d. Create a single SweepDetection representing the cluster
-    // 4. Return surviving cluster centroids
-    let _ = (detections, MIN_CLUSTER_GATES);
-    Vec::new()
+    if detections.is_empty() {
+        return Vec::new();
+    }
+
+    let n = detections.len();
+    let mut parent: Vec<usize> = (0..n).collect();
+    let mut rank: Vec<usize> = vec![0; n];
+
+    // Union-find helpers (inline to avoid extra struct)
+    fn find(parent: &mut [usize], x: usize) -> usize {
+        if parent[x] != x {
+            parent[x] = find(parent, parent[x]);
+        }
+        parent[x]
+    }
+    fn union(parent: &mut [usize], rank: &mut [usize], a: usize, b: usize) {
+        let ra = find(parent, a);
+        let rb = find(parent, b);
+        if ra == rb { return; }
+        if rank[ra] < rank[rb] {
+            parent[ra] = rb;
+        } else if rank[ra] > rank[rb] {
+            parent[rb] = ra;
+        } else {
+            parent[rb] = ra;
+            rank[ra] += 1;
+        }
+    }
+
+    // Adjacency thresholds
+    let az_threshold = 2.0f32;   // degrees
+    let range_threshold = 0.75f32; // km (~3 gates at 0.25 km)
+
+    // O(n²) pairwise — fine for typical detection counts (<1000)
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let az_diff = {
+                let d = (detections[i].azimuth - detections[j].azimuth).abs();
+                if d > 180.0 { 360.0 - d } else { d }
+            };
+            let range_diff = (detections[i].range_km - detections[j].range_km).abs();
+
+            if az_diff <= az_threshold && range_diff <= range_threshold {
+                union(&mut parent, &mut rank, i, j);
+            }
+        }
+    }
+
+    // Group by component
+    let mut components: std::collections::HashMap<usize, Vec<usize>> =
+        std::collections::HashMap::new();
+    for i in 0..n {
+        let root = find(&mut parent, i);
+        components.entry(root).or_default().push(i);
+    }
+
+    // Build centroid detection for each qualifying cluster
+    let mut result = Vec::new();
+    for (_root, indices) in &components {
+        if indices.len() < MIN_CLUSTER_GATES {
+            continue;
+        }
+
+        let mut sum_az_x: f64 = 0.0;
+        let mut sum_az_y: f64 = 0.0;
+        let mut sum_range: f64 = 0.0;
+        let mut max_rot_vel: f32 = 0.0;
+        let mut max_shear: f32 = 0.0;
+        let mut total_gates: usize = 0;
+
+        for &idx in indices {
+            let d = &detections[idx];
+            let az_rad = (d.azimuth as f64).to_radians();
+            sum_az_x += az_rad.cos();
+            sum_az_y += az_rad.sin();
+            sum_range += d.range_km as f64;
+            if d.rotational_velocity > max_rot_vel {
+                max_rot_vel = d.rotational_velocity;
+            }
+            if d.max_shear > max_shear {
+                max_shear = d.max_shear;
+            }
+            total_gates += d.gate_count;
+        }
+
+        let count = indices.len() as f64;
+        let centroid_az = (sum_az_y.atan2(sum_az_x).to_degrees() as f32 + 360.0) % 360.0;
+        let centroid_range = (sum_range / count) as f32;
+        let elevation = detections[indices[0]].elevation;
+
+        result.push(SweepDetection {
+            azimuth: centroid_az,
+            range_km: centroid_range,
+            elevation,
+            rotational_velocity: max_rot_vel,
+            max_shear,
+            gate_count: total_gates,
+        });
+    }
+
+    result
 }
 
 /// Check vertical continuity across multiple elevation tilts.
@@ -334,27 +417,66 @@ fn cluster_detections(detections: &[SweepDetection]) -> Vec<SweepDetection> {
 /// adjacent tilts. This eliminates single-scan noise detections.
 fn vertical_continuity(
     clustered_by_sweep: &[Vec<SweepDetection>],
-    sweep_indices: &[usize],
-    sweeps: &[wx_radar::level2::Level2Sweep],
+    _sweep_indices: &[usize],
+    _sweeps: &[wx_radar::level2::Level2Sweep],
 ) -> Vec<SweepDetection> {
-    // TODO: Full implementation of vertical continuity check.
-    //
-    // Algorithm outline:
-    // 1. For each detection in the lowest tilt, try to match it to detections
-    //    in higher tilts:
-    //    a. Convert (azimuth, range, elevation) to approximate (x, y) in km
-    //       using: x = range * sin(az), y = range * cos(az)
-    //    b. For each candidate in the next higher tilt:
-    //       - Compute horizontal distance = sqrt((x1-x2)^2 + (y1-y2)^2)
-    //       - If distance < MAX_HORIZONTAL_OFFSET_KM, it is a match
-    //    c. Greedily match closest pairs
-    // 2. Count how many tilts each lowest-tilt detection has matches on
-    // 3. Keep only detections with >= MIN_VERTICAL_TILTS matches
-    // 4. For surviving detections, use the lowest-tilt values but record
-    //    the full vertical extent
-    let _ = (clustered_by_sweep, sweep_indices, sweeps,
-             MIN_VERTICAL_TILTS, MAX_HORIZONTAL_OFFSET_KM);
-    Vec::new()
+    if clustered_by_sweep.is_empty() {
+        return Vec::new();
+    }
+
+    // Convert detection to (x, y) in km for distance calculations
+    fn to_xy(d: &SweepDetection) -> (f64, f64) {
+        let az_rad = (d.azimuth as f64).to_radians();
+        let x = d.range_km as f64 * az_rad.sin();
+        let y = d.range_km as f64 * az_rad.cos();
+        (x, y)
+    }
+
+    // Start from lowest tilt detections
+    let mut result = Vec::new();
+
+    for base_det in &clustered_by_sweep[0] {
+        let (bx, by) = to_xy(base_det);
+        let mut tilt_count = 1usize;
+        let mut best_rot_vel = base_det.rotational_velocity;
+        let mut best_shear = base_det.max_shear;
+
+        // Try to find matches on higher tilts
+        for sweep_dets in clustered_by_sweep.iter().skip(1) {
+            let mut closest_dist = MAX_HORIZONTAL_OFFSET_KM;
+            let mut closest_det: Option<&SweepDetection> = None;
+            for det in sweep_dets {
+                let (dx, dy) = to_xy(det);
+                let dist = ((bx - dx).powi(2) + (by - dy).powi(2)).sqrt();
+                if dist < closest_dist {
+                    closest_dist = dist;
+                    closest_det = Some(det);
+                }
+            }
+            if let Some(det) = closest_det {
+                tilt_count += 1;
+                if det.rotational_velocity > best_rot_vel {
+                    best_rot_vel = det.rotational_velocity;
+                }
+                if det.max_shear > best_shear {
+                    best_shear = det.max_shear;
+                }
+            }
+        }
+
+        if tilt_count >= MIN_VERTICAL_TILTS {
+            result.push(SweepDetection {
+                azimuth: base_det.azimuth,
+                range_km: base_det.range_km,
+                elevation: base_det.elevation,
+                rotational_velocity: best_rot_vel,
+                max_shear: best_shear,
+                gate_count: base_det.gate_count,
+            });
+        }
+    }
+
+    result
 }
 
 /// Compute strength rank (1-5) from rotational velocity.

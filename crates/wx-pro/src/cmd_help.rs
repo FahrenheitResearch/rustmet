@@ -229,6 +229,28 @@ pub fn run(pretty: bool) {
                 example: "wx-pro watch-box --lat 35.2 --lon -97.4 --threshold-dbz 40",
             },
             CommandDef {
+                name: "storm-analysis",
+                description: "Multi-frame storm cell tracking — SCIT-style identification, mesocyclone association, motion vectors, trend analysis",
+                args: vec![
+                    ArgDef { name: "--site", arg_type: "string", required: false, default: None, description: "NEXRAD site ID (e.g., KTLX)" },
+                    ArgDef { name: "--lat", arg_type: "float", required: false, default: None, description: "Latitude (finds nearest radar)" },
+                    ArgDef { name: "--lon", arg_type: "float", required: false, default: None, description: "Longitude (finds nearest radar)" },
+                    ArgDef { name: "--frames", arg_type: "int", required: false, default: Some("5"), description: "Number of radar volume scans to track (1-10)" },
+                ],
+                example: "wx-pro storm-analysis --site KTLX --frames 5",
+            },
+            CommandDef {
+                name: "storm-image",
+                description: "Render labeled storm cell PNG — reflectivity PPI with cell IDs, mesocyclone markers, info box, and legend",
+                args: vec![
+                    ArgDef { name: "--site", arg_type: "string", required: false, default: None, description: "NEXRAD site ID (e.g., KTLX)" },
+                    ArgDef { name: "--lat", arg_type: "float", required: false, default: None, description: "Latitude (finds nearest radar)" },
+                    ArgDef { name: "--lon", arg_type: "float", required: false, default: None, description: "Longitude (finds nearest radar)" },
+                    ArgDef { name: "--size", arg_type: "int", required: false, default: Some("800"), description: "Image size in pixels" },
+                ],
+                example: "wx-pro storm-image --site KTLX --size 800",
+            },
+            CommandDef {
                 name: "commands",
                 description: "Show this help — describes all commands, arguments, and output format for agent discovery",
                 args: vec![],
