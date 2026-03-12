@@ -310,11 +310,11 @@ The Docker image builds `wx-server`, `wx-pro`, and `wx-lite` in a multi-stage bu
 
 ### AI Agent Integration
 
-See `examples/hermes-agent/` for a complete deployment guide using Hermes Agent with Nemotron-3-Super-120B served via vLLM. The agent uses `wx-mcp` to access all 20 weather tools, runs on a cron schedule, and pushes alerts via Telegram.
+See `examples/hermes-agent/` for a complete deployment guide using Hermes Agent with Nemotron-3-Super-120B via OpenRouter (free tier). The agent uses `wx-mcp` to access all 20 weather tools, runs on a cron schedule, and pushes alerts via Telegram.
 
 Architecture:
 ```
-LLM (vLLM / any OpenAI-compatible endpoint)
+LLM (OpenRouter / any OpenAI-compatible endpoint)
   └─ Hermes Agent (memory, skills, cron)
        └─ wx-mcp (MCP stdio)
             └─ wx-pro / wx-lite (GRIB2, NEXRAD, NWS)

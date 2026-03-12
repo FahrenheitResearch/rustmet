@@ -2,17 +2,13 @@
 # Copy to ~/.hermes/config.yaml
 
 model:
-  # For self-hosted vLLM on H200:
-  #   Set OPENAI_BASE_URL=http://localhost:8000/v1 in ~/.hermes/.env
-  #   Set LLM_MODEL=nvidia/Llama-3.1-Nemotron-3-Super-120B-v1 in ~/.hermes/.env
-  #   Set OPENAI_API_KEY=dummy in ~/.hermes/.env
+  # Nemotron-3-Super-120B via OpenRouter (free tier available)
+  # Set OPENROUTER_API_KEY=sk-or-... in ~/.hermes/.env
   #
-  # For OpenRouter (no GPU required):
-  #   Set OPENROUTER_API_KEY=sk-or-... in ~/.hermes/.env
-  #   provider: openrouter
-  #   default: nousresearch/hermes-3-llama-3.1-70b
-  provider: openai
-  default: nvidia/Llama-3.1-Nemotron-3-Super-120B-v1
+  # Or run `hermes model`, select OpenRouter, enter custom model name:
+  #   nvidia/nemotron-3-super-120b-a12b:free
+  provider: openrouter
+  default: nvidia/nemotron-3-super-120b-a12b:free
 
 memory:
   memory_enabled: true

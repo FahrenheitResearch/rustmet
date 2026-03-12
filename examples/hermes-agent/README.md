@@ -39,20 +39,18 @@ Deploy an autonomous AI weather agent using [Hermes Agent](https://github.com/No
 - **Hermes Agent** — [github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
 - **wx-mcp** binary — the MCP server that exposes rustmet's weather tools
 - **wx-pro** or **wx-lite** binary — the underlying weather CLI (wx-mcp delegates to these)
-- **LLM endpoint** — any OpenAI-compatible API (vLLM, Ollama, OpenRouter, etc.)
+- **LLM endpoint** — OpenRouter (free tier available), or any OpenAI-compatible API
 - **Telegram bot token** — create one via [@BotFather](https://t.me/BotFather)
 
-### Hardware (self-hosted LLM)
+### LLM Setup
 
-The default config uses Nemotron-3-Super-120B via vLLM:
+The default config uses Nemotron-3-Super-120B on OpenRouter's free tier — no GPU required:
 
-| Setup | GPU | VRAM | Notes |
-|-------|-----|------|-------|
-| Single GPU | 1x H200 | 141 GB | NVFP4 quantization, fits in one card |
-| Multi-GPU | 2x H100-80GB | 160 GB | Tensor parallel across two cards |
-| Budget | 2x A100-80GB | 160 GB | Slower but works with FP8 |
+```
+nvidia/nemotron-3-super-120b-a12b:free
+```
 
-Smaller models (70B, 8B) work on consumer hardware but reduce agent quality. Any OpenAI-compatible endpoint works — use OpenRouter if you don't have a GPU.
+Get an API key at [openrouter.ai/keys](https://openrouter.ai/keys). Any OpenRouter or OpenAI-compatible model works — adjust `model.default` in the config.
 
 ## Quick Start
 
@@ -98,17 +96,7 @@ hermes gateway setup    # Interactive wizard
 hermes gateway install  # Install as systemd/launchd service
 ```
 
-### 5. Start vLLM (if self-hosting)
-
-```bash
-vllm serve nvidia/Llama-3.1-Nemotron-3-Super-120B-v1 \
-  --port 8000 \
-  --max-model-len 8192 \
-  --enable-auto-tool-choice \
-  --tool-call-parser hermes
-```
-
-### 6. Set up cron jobs
+### 5. Set up cron jobs
 
 Cron jobs are managed via CLI, not config files:
 
@@ -138,7 +126,7 @@ hermes cron add --name fire_weather_check \
   --prompt "Check fire weather conditions. Alert if RH is below 20% or Red Flag Warnings are active."
 ```
 
-### 7. (Optional) Start the tile server
+### 6. (Optional) Start the tile server
 
 ```bash
 wx-server --port 8080 --cache-size 512
@@ -146,7 +134,7 @@ wx-server --port 8080 --cache-size 512
 
 Enables the live map dashboard and XYZ tile streaming for visual weather overlays.
 
-### 8. Start the agent
+### 7. Start the agent
 
 ```bash
 hermes
@@ -250,23 +238,14 @@ examples/hermes-agent/
             └── SKILL.md
 ```
 
-## Deployment on Vast.ai (H200)
+## Self-Hosted LLM (Optional)
 
-1. Rent a single H200 instance (141 GB VRAM)
-2. Install vLLM: `pip install vllm`
-3. Start the model:
-   ```bash
-   vllm serve nvidia/Llama-3.1-Nemotron-3-Super-120B-v1 \
-     --port 8000 \
-     --max-model-len 8192 \
-     --enable-auto-tool-choice \
-     --tool-call-parser hermes
-   ```
-4. On your local machine (or the same instance), set `OPENAI_BASE_URL` to point at the vLLM endpoint
-5. Place `wx-mcp` and `wx-pro` binaries in your PATH
-6. Start Hermes Agent: `hermes`
+If you prefer to self-host instead of using OpenRouter, any OpenAI-compatible endpoint works. Set in `~/.hermes/.env`:
 
-If running Hermes locally and vLLM remotely, update `~/.hermes/.env`:
 ```bash
-OPENAI_BASE_URL=http://<vast-ai-ip>:8000/v1
+OPENAI_BASE_URL=http://your-server:8000/v1
+OPENAI_API_KEY=dummy
+LLM_MODEL=your-model-name
 ```
+
+Or use the interactive wizard: `hermes model` and select "Custom endpoint".
