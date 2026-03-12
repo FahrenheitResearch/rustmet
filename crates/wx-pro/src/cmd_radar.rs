@@ -55,24 +55,99 @@ pub fn run(site: &str, lat: Option<f64>, lon: Option<f64>, pretty: bool) {
     let num_sweeps = l2.sweeps.len();
     let total_radials: usize = l2.sweeps.iter().map(|s| s.radials.len()).sum();
 
-    // Find max reflectivity across all sweeps
-    let mut max_ref: f32 = f32::MIN;
-    let mut max_ref_az: f32 = 0.0;
-    let mut max_ref_range: f32 = 0.0;
-    let mut max_ref_elev: f32 = 0.0;
+    // Find max reflectivity across all sweeps with quality control:
+    // 1. Skip sweeps at or below 0.1° elevation (SAILS/clear-air/clutter cuts)
+    // 2. Minimum 10km range to avoid ground clutter and sidelobe contamination
+    // 3. Require spatial consistency: a gate only counts if at least 2 adjacent
+    //    gates in the same radial also exceed (max - 10 dBZ), filtering isolated
+    //    noise spikes that don't represent real precipitation
+    const MIN_RANGE_KM: f32 = 10.0;
+    const MIN_ELEVATION_DEG: f32 = 0.1;
+    const MAX_ELEVATION_DEG: f32 = 5.0; // Only use lowest tilts for reflectivity max
+    const NEIGHBOR_THRESHOLD_DB: f32 = 10.0;
+    const MIN_NEIGHBORS: usize = 2;
+
+    // First pass: collect all candidate gates
+    struct RefCandidate {
+        val: f32,
+        az: f32,
+        range_km: f32,
+        elev: f32,
+        gate_idx: usize,
+        radial_data: Vec<f32>,  // neighboring gate values
+    }
+    let mut candidates: Vec<RefCandidate> = Vec::new();
 
     for sweep in &l2.sweeps {
+        if sweep.elevation_angle < MIN_ELEVATION_DEG || sweep.elevation_angle > MAX_ELEVATION_DEG { continue; }
         for radial in &sweep.radials {
             for moment in &radial.moments {
                 if moment.product == wx_radar::products::RadarProduct::Reflectivity {
                     let gate_size_km = moment.gate_size as f32 / 1000.0;
                     let first_gate_km = moment.first_gate_range as f32 / 1000.0;
+
+                    // Only collect gates above 40 dBZ as max candidates
                     for (gi, &val) in moment.data.iter().enumerate() {
-                        if !val.is_nan() && val > max_ref {
-                            max_ref = val;
-                            max_ref_az = radial.azimuth;
-                            max_ref_range = first_gate_km + gi as f32 * gate_size_km;
-                            max_ref_elev = sweep.elevation_angle;
+                        let range_km = first_gate_km + gi as f32 * gate_size_km;
+                        if !val.is_nan() && val > 40.0 && range_km >= MIN_RANGE_KM {
+                            let start = gi.saturating_sub(3);
+                            let end = (gi + 4).min(moment.data.len());
+                            let neighbors: Vec<f32> = moment.data[start..end].iter()
+                                .enumerate()
+                                .filter(|(i, _)| start + i != gi)
+                                .map(|(_, &v)| v)
+                                .collect();
+                            candidates.push(RefCandidate {
+                                val, az: radial.azimuth, range_km,
+                                elev: sweep.elevation_angle, gate_idx: gi,
+                                radial_data: neighbors,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by value descending, pick highest with neighbor support
+    candidates.sort_by(|a, b| b.val.partial_cmp(&a.val).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut max_ref: f32 = f32::MIN;
+    let mut max_ref_az: f32 = 0.0;
+    let mut max_ref_range: f32 = 0.0;
+    let mut max_ref_elev: f32 = 0.0;
+
+    for c in &candidates {
+        let threshold = c.val - NEIGHBOR_THRESHOLD_DB;
+        let neighbor_count = c.radial_data.iter()
+            .filter(|&&v| !v.is_nan() && v >= threshold)
+            .count();
+        if neighbor_count >= MIN_NEIGHBORS {
+            max_ref = c.val;
+            max_ref_az = c.az;
+            max_ref_range = c.range_km;
+            max_ref_elev = c.elev;
+            break;
+        }
+    }
+
+    // Fallback: if no spatially-consistent gate found, use simple max with filters
+    if max_ref == f32::MIN {
+        for sweep in &l2.sweeps {
+            if sweep.elevation_angle < MIN_ELEVATION_DEG || sweep.elevation_angle > MAX_ELEVATION_DEG { continue; }
+            for radial in &sweep.radials {
+                for moment in &radial.moments {
+                    if moment.product == wx_radar::products::RadarProduct::Reflectivity {
+                        let gate_size_km = moment.gate_size as f32 / 1000.0;
+                        let first_gate_km = moment.first_gate_range as f32 / 1000.0;
+                        for (gi, &val) in moment.data.iter().enumerate() {
+                            let range_km = first_gate_km + gi as f32 * gate_size_km;
+                            if !val.is_nan() && val > max_ref && range_km >= MIN_RANGE_KM {
+                                max_ref = val;
+                                max_ref_az = radial.azimuth;
+                                max_ref_range = range_km;
+                                max_ref_elev = sweep.elevation_angle;
+                            }
                         }
                     }
                 }
@@ -84,14 +159,19 @@ pub fn run(site: &str, lat: Option<f64>, lon: Option<f64>, pretty: bool) {
     let elevations: Vec<f32> = l2.sweeps.iter().map(|s| s.elevation_angle).collect();
 
     // Find max velocity (for severe weather indication)
+    // Same minimum range and elevation filters to avoid artifacts
     let mut max_inbound: f32 = 0.0;
     let mut max_outbound: f32 = 0.0;
     for sweep in &l2.sweeps {
+        if sweep.elevation_angle < MIN_ELEVATION_DEG { continue; }
         for radial in &sweep.radials {
             for moment in &radial.moments {
                 if moment.product == wx_radar::products::RadarProduct::Velocity {
-                    for &val in &moment.data {
-                        if !val.is_nan() {
+                    let gate_size_km = moment.gate_size as f32 / 1000.0;
+                    let first_gate_km = moment.first_gate_range as f32 / 1000.0;
+                    for (gi, &val) in moment.data.iter().enumerate() {
+                        let range_km = first_gate_km + gi as f32 * gate_size_km;
+                        if !val.is_nan() && range_km >= MIN_RANGE_KM {
                             if val < max_inbound { max_inbound = val; }
                             if val > max_outbound { max_outbound = val; }
                         }

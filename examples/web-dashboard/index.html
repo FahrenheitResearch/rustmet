@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rustmet</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#222;
+  --bg-dark:#1a1a1a;
+  --bg-panel:#2a2a2a;
+  --bg-bar:#2e2e2e;
+  --accent:#1d77aa;
+  --accent-hover:#2389c0;
+  --accent-active:#155f8a;
+  --accent-dim:rgba(29,119,170,0.18);
+  --accent-glow:rgba(29,119,170,0.35);
+  --warn:#ff9800;
+  --danger:#f44336;
+  --success:#4caf50;
+  --text:#bbb;
+  --text-bright:#ddd;
+  --text-dim:#777;
+  --text-muted:#4a4a4a;
+  --border:#363636;
+  --border-hover:#484848;
+  --font:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:'JetBrains Mono','Consolas','SF Mono',monospace;
+  --sidebar-w:218px;
+  --infobar-h:30px;
+  --scrubber-h:34px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);font-size:12px;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08)}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+
+/* ── Layout ──────────────────────────────────────────────────── */
+.app{display:flex;height:100%;flex-direction:column}
+
+/* ── Top Bar ─────────────────────────────────────────────────── */
+.top-tabs{display:flex;background:#191919;border-bottom:1px solid var(--border);height:32px;align-items:stretch;z-index:1000;flex-shrink:0}
+.top-tabs .tab{padding:0 16px;line-height:32px;color:var(--text-dim);cursor:pointer;border:none;background:none;
+  font-size:11px;font-family:var(--font);font-weight:600;text-transform:uppercase;letter-spacing:.8px;
+  border-bottom:2px solid transparent;transition:color 80ms,border-color 80ms}
+.top-tabs .tab:hover{color:var(--text-bright)}
+.top-tabs .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.top-tabs .brand{padding:0 12px;line-height:32px;font-weight:700;font-size:14px;color:var(--text-bright);
+  letter-spacing:1.5px;margin-right:auto;font-family:var(--mono);text-transform:lowercase}
+.top-tabs .status{padding:0 10px;line-height:32px;font-size:10px;color:var(--text-muted);font-family:var(--mono);
+  display:flex;align-items:center;gap:5px}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0;
+  box-shadow:0 0 0 2px rgba(0,0,0,0.4)}
+.status-dot.connected{background:var(--success);box-shadow:0 0 4px rgba(76,175,80,0.5),0 0 0 2px rgba(0,0,0,0.4)}
+.status-dot.error{background:var(--danger);box-shadow:0 0 4px rgba(244,67,54,0.5),0 0 0 2px rgba(0,0,0,0.4)}
+
+.main-area{display:flex;flex:1;overflow:hidden;position:relative}
+
+/* ── Left Sidebar ────────────────────────────────────────────── */
+.sidebar{width:var(--sidebar-w);background:var(--bg-dark);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:800;flex-shrink:0;overflow:hidden}
+.sidebar.collapsed{width:0;border-right:none}
+.sidebar-section{padding:7px 10px;border-bottom:1px solid var(--border)}
+.sidebar-section>label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:1.2px;
+  color:var(--text-dim);margin-bottom:4px;font-weight:600;font-family:var(--font)}
+.sidebar select{width:100%;background:var(--bg-panel);color:var(--text-bright);border:1px solid var(--border);
+  padding:4px 6px;font-size:11px;font-family:var(--font);outline:none;cursor:pointer;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23777'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center}
+.sidebar select:hover,.sidebar select:focus{border-color:var(--accent)}
+.sidebar select optgroup{font-weight:700;color:var(--text-dim);font-style:normal;background:#1e1e1e;
+  font-size:10px;letter-spacing:0.5px}
+.sidebar select option{font-weight:400;color:var(--text-bright);background:var(--bg-panel);padding:3px 6px}
+.sidebar input[type=range]{width:100%;height:3px;-webkit-appearance:none;appearance:none;
+  background:var(--border);outline:none;cursor:pointer;margin:4px 0}
+.sidebar input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;
+  background:var(--accent);border:none;cursor:pointer}
+.sidebar input[type=range]::-moz-range-thumb{width:12px;height:12px;background:var(--accent);border:none}
+
+/* Forecast hour list */
+.fhour-list{flex:1;overflow-y:auto;padding:3px 10px 3px 10px}
+.fhour-list-label{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);
+  margin-bottom:3px;font-weight:600;padding:4px 0 2px;font-family:var(--font)}
+.fhour-btn{display:block;width:100%;text-align:center;padding:3px 0;margin-bottom:1px;
+  background:var(--bg-panel);color:var(--text-dim);border:1px solid transparent;cursor:pointer;
+  font-family:var(--mono);font-size:11px;font-weight:500;transition:all 60ms}
+.fhour-btn:hover{background:var(--accent-dim);color:var(--text-bright)}
+.fhour-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);
+  text-shadow:0 1px 2px rgba(0,0,0,0.3)}
+
+/* Overlay checkboxes */
+.overlay-row{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;color:var(--text)}
+.overlay-row input[type=checkbox]{accent-color:var(--accent);margin:0;width:13px;height:13px;cursor:pointer}
+.overlay-row label{cursor:pointer;user-select:none}
+
+/* Contour controls */
+.contour-controls{padding:4px 0 4px 20px;display:none}
+.contour-controls.visible{display:block}
+.contour-slider-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.contour-slider-row input[type=range]{flex:1;height:3px;-webkit-appearance:none;appearance:none;
+  background:var(--border);outline:none;cursor:pointer}
+.contour-slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;
+  background:var(--accent);border:none}
+.contour-slider-row .contour-val{font-family:var(--mono);font-size:10px;color:var(--accent);min-width:42px;text-align:right}
+.contour-slider-label{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;font-family:var(--font)}
+.contour-colors{display:flex;gap:3px;margin-top:3px;align-items:center}
+.contour-colors .contour-swatch{width:16px;height:16px;cursor:pointer;border:2px solid var(--border);
+  transition:border-color 60ms}
+.contour-colors .contour-swatch:hover{border-color:var(--text-dim)}
+.contour-colors .contour-swatch.active{border-color:var(--accent)}
+
+/* Run picker */
+.run-picker{margin-top:5px}
+.run-date-row{display:flex;gap:4px;align-items:center;margin-bottom:4px}
+.run-date-row input[type=date]{flex:1;background:var(--bg-panel);color:var(--text-bright);border:1px solid var(--border);
+  padding:4px 6px;font-size:11px;font-family:var(--mono);outline:none;cursor:pointer;color-scheme:dark}
+.run-date-row input[type=date]:hover,.run-date-row input[type=date]:focus{border-color:var(--accent)}
+.run-latest-btn{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(29,119,170,0.3);
+  padding:4px 8px;font-size:10px;font-family:var(--font);cursor:pointer;white-space:nowrap;
+  font-weight:600;text-transform:uppercase;letter-spacing:.5px;transition:all 60ms}
+.run-latest-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.run-latest-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cycle-label{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:2px;font-weight:600;font-family:var(--font)}
+.cycle-grid{display:none}
+.cycle-select{width:100%;background:var(--bg-panel);color:var(--text-bright);border:1px solid var(--border);
+  padding:4px 6px;font-size:11px;font-family:var(--mono);outline:none;cursor:pointer;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23777'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center}
+.cycle-select:hover,.cycle-select:focus{border-color:var(--accent)}
+
+/* ── Right content ───────────────────────────────────────────── */
+.content{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden}
+
+/* Info bar — the signature PivotalWeather gray strip */
+.info-bar{height:var(--infobar-h);background:#303030;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 12px;gap:0;font-family:var(--mono);font-size:11px;
+  color:var(--text);flex-shrink:0;z-index:600;letter-spacing:0.2px}
+.info-bar .info-model{font-weight:700;color:var(--accent);text-transform:uppercase;font-size:12px;
+  padding-right:10px}
+.info-bar .info-sep{color:#444;padding:0 8px;font-size:9px}
+.info-bar .info-label{color:var(--text-dim);font-size:9px;text-transform:uppercase;letter-spacing:.6px;
+  padding-right:4px}
+.info-bar .info-val{color:var(--text-bright);font-weight:500}
+.info-bar .info-param{margin-left:auto;color:#e0e0e0;font-weight:700;font-size:11px;
+  background:rgba(29,119,170,0.15);padding:2px 10px;border:1px solid rgba(29,119,170,0.3)}
+
+/* Scrubber bar — dense, utilitarian */
+.scrubber-bar{height:var(--scrubber-h);background:#2a2a2a;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;z-index:600}
+.scrubber-bar button{background:var(--bg-panel);color:var(--text-dim);border:1px solid var(--border);
+  width:26px;height:22px;cursor:pointer;font-size:11px;display:flex;align-items:center;
+  justify-content:center;transition:all 60ms}
+.scrubber-bar button:hover{border-color:var(--accent);color:var(--accent)}
+.scrubber-bar button.playing{background:var(--accent);color:#fff;border-color:var(--accent)}
+.scrubber-track{flex:1;height:4px;background:#1a1a1a;border:1px solid var(--border);position:relative;cursor:pointer}
+.scrubber-fill{height:100%;background:var(--accent);transition:width 60ms}
+.scrubber-handle{position:absolute;top:50%;width:12px;height:12px;background:var(--accent);
+  border:2px solid #ddd;transform:translate(-50%,-50%);cursor:grab;transition:left 60ms;
+  box-shadow:0 0 6px rgba(29,119,170,0.4)}
+.scrubber-time{font-family:var(--mono);font-size:11px;color:var(--text-dim);min-width:44px;
+  text-align:center;font-weight:600}
+.speed-select{background:var(--bg-panel);color:var(--text);border:1px solid var(--border);
+  font-size:10px;font-family:var(--mono);padding:2px 4px;outline:none;cursor:pointer}
+
+/* Map container */
+.map-wrap{flex:1;position:relative;overflow:hidden}
+#map{position:absolute;inset:0;z-index:1}
+
+/* Cursor readout — upper right, high contrast */
+.cursor-readout{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.92);color:var(--text-bright);
+  font-family:var(--mono);font-size:11px;padding:8px 12px;z-index:700;display:none;pointer-events:none;
+  border:1px solid var(--border);backdrop-filter:blur(8px);min-width:120px}
+.cursor-readout.visible{display:block}
+.cursor-readout .readout-val{font-size:20px;font-weight:700;color:#fff;line-height:1.1;
+  text-shadow:0 1px 4px rgba(0,0,0,0.6)}
+.cursor-readout .readout-coord{font-size:9px;color:var(--text-dim);margin-top:3px;letter-spacing:0.3px}
+
+/* Colorbar — horizontal, bottom-center, prominent */
+.colorbar-wrap{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:700;
+  background:rgba(10,10,10,0.92);padding:6px 16px 5px;border:1px solid rgba(255,255,255,0.1);
+  backdrop-filter:blur(12px);display:flex;align-items:center;gap:12px}
+.colorbar-wrap img{height:20px;width:480px;display:block;image-rendering:auto}
+.colorbar-label{font-size:11px;color:var(--text);font-family:var(--mono);white-space:nowrap;
+  font-weight:600;letter-spacing:0.3px}
+
+/* ── Leaflet overrides ───────────────────────────────────────── */
+.leaflet-control-zoom{border:none!important;margin:10px!important}
+.leaflet-control-zoom a{background:rgba(30,30,30,0.9)!important;color:var(--text)!important;
+  border:1px solid var(--border)!important;width:26px!important;height:26px!important;
+  line-height:26px!important;font-size:13px!important;backdrop-filter:blur(8px)!important}
+.leaflet-control-zoom a:hover{background:var(--accent-dim)!important;color:var(--accent)!important;
+  border-color:var(--accent)!important}
+.leaflet-control-attribution{display:none!important}
+.leaflet-tile-pane img{image-rendering:auto}
+
+/* ── Sounding Modal ──────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2000;display:none;
+  align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.visible{display:flex}
+.modal{background:#111;border:1px solid var(--border);max-width:1100px;max-height:90vh;width:95%;
+  display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;
+  border-bottom:1px solid var(--border);background:#1a1a1a}
+.modal-header .modal-title{font-weight:700;font-size:12px;color:var(--text-bright);flex:1;
+  font-family:var(--mono);letter-spacing:0.3px}
+.modal-close{background:none;border:1px solid var(--border);color:var(--text-dim);font-size:14px;
+  cursor:pointer;padding:2px 8px;line-height:1;transition:all 60ms}
+.modal-close:hover{color:#fff;border-color:var(--danger);background:rgba(244,67,54,0.15)}
+.modal-body{overflow:auto;padding:0;flex:1;display:flex;align-items:center;justify-content:center;background:#0a0a0e}
+.modal-body img,.modal-body svg{max-width:100%;max-height:80vh}
+
+/* ── Toast ───────────────────────────────────────────────────── */
+.toast-container{position:fixed;bottom:16px;right:16px;z-index:3000;display:flex;flex-direction:column;gap:4px}
+.toast{padding:7px 12px;background:rgba(30,30,30,0.95);border:1px solid var(--border);font-size:11px;
+  color:var(--text);font-family:var(--font);animation:toastIn .15s ease;max-width:300px;
+  backdrop-filter:blur(12px)}
+.toast.error{border-left:3px solid var(--danger);color:#ff8a80}
+.toast.warn{border-left:3px solid var(--warn);color:#ffcc80}
+.toast.success{border-left:3px solid var(--success);color:#a5d6a7}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Radar mode ──────────────────────────────────────────────── */
+.radar-mode .map-wrap{background:#000}
+.radar-mode #map{background:#000!important}
+.radar-mode .leaflet-container{background:#000!important}
+.radar-mode .info-bar{background:#111;border-color:#1a1a1a}
+.radar-mode .info-bar .info-model{color:#ff6b6b}
+.radar-mode .scrubber-bar{background:#151515}
+
+/* ── Keyboard shortcut help ──────────────────────────────────── */
+.shortcuts-help{position:absolute;bottom:8px;left:8px;z-index:700;font-size:9px;color:var(--text-muted);
+  font-family:var(--mono);opacity:0.7}
+.shortcuts-help span{margin-right:8px}
+.shortcuts-help kbd{background:rgba(30,30,30,0.8);border:1px solid var(--border);padding:1px 4px;
+  font-size:9px;color:var(--text-dim);font-family:var(--mono)}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media(max-width:768px){
+  .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:900;transform:translateX(-100%);transition:transform .15s}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar.collapsed{transform:translateX(-100%)}
+  .mobile-toggle{display:flex!important}
+  .info-bar{font-size:9px;gap:0;overflow-x:auto}
+  .shortcuts-help{display:none}
+  .colorbar-wrap img{width:250px}
+}
+.mobile-toggle{display:none;position:absolute;top:40px;left:8px;z-index:850;background:rgba(30,30,30,0.9);
+  border:1px solid var(--border);color:var(--text);width:30px;height:30px;align-items:center;
+  justify-content:center;cursor:pointer;font-size:14px;backdrop-filter:blur(8px)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Top tab bar -->
+  <div class="top-tabs">
+    <span class="brand">rustmet</span>
+    <button class="tab active" data-tab="model">Models</button>
+    <button class="tab" data-tab="radar">Radar</button>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">connecting</span>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <!-- Left Sidebar -->
+    <div class="sidebar" id="sidebar">
+
+      <!-- Model Run -->
+      <div class="sidebar-section" id="modelSection">
+        <label>Model Run</label>
+        <select id="modelSelect">
+          <option value="hrrr">HRRR 3km</option>
+          <option value="gfs">GFS 0.25&deg;</option>
+          <option value="nam">NAM 12km</option>
+          <option value="rap">RAP 13km</option>
+        </select>
+        <div class="run-picker">
+          <div class="run-date-row">
+            <input type="date" id="runDateInput" title="Run date (UTC)">
+            <button class="run-latest-btn active" id="runLatestBtn" title="Use latest available run">Latest</button>
+          </div>
+          <label style="margin-top:2px">Cycle</label>
+          <select class="cycle-select" id="cycleSelect"></select>
+          <div class="cycle-grid" id="cycleGrid" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Parameter -->
+      <div class="sidebar-section" id="paramSection">
+        <label>Parameter</label>
+        <select id="paramSelect">
+          <optgroup label="Surface">
+            <option value="t2m">2m Temperature</option>
+            <option value="td2m">2m Dewpoint</option>
+            <option value="rh2m">2m Relative Humidity</option>
+            <option value="mslp">MSLP</option>
+            <option value="sfcwind">10m Wind</option>
+            <option value="gust">Wind Gust</option>
+            <option value="refcmp" selected>Composite Reflectivity</option>
+            <option value="vis">Visibility</option>
+            <option value="li">Lifted Index</option>
+            <option value="thetae">Theta-E</option>
+            <option value="sfcpres">Surface Pressure</option>
+            <option value="skt">Skin Temperature</option>
+          </optgroup>
+          <optgroup label="Precipitation">
+            <option value="precip">QPF</option>
+            <option value="pwat">PWAT</option>
+            <option value="tcc">Cloud Cover</option>
+            <option value="frozn">Frozen Precip %</option>
+            <option value="prate">Max Hourly Precip Rate</option>
+            <option value="refd1km">Simulated Reflectivity 1km</option>
+          </optgroup>
+          <optgroup label="Instability">
+            <option value="cape">SBCAPE</option>
+            <option value="cin">CIN</option>
+            <option value="mlcape">MLCAPE</option>
+            <option value="mucape">MUCAPE</option>
+            <option value="lclhgt">LCL Height</option>
+          </optgroup>
+          <optgroup label="Wind Shear">
+            <option value="srh1">0-1km SRH</option>
+            <option value="helicity">0-3km SRH</option>
+            <option value="shear06">0-6km Shear</option>
+            <option value="shear01">0-1km Shear</option>
+            <option value="esrh">Effective SRH</option>
+          </optgroup>
+          <optgroup label="Composite Parameters">
+            <option value="uh">UH 2-5km</option>
+            <option value="stp">Sig Tornado Parameter</option>
+            <option value="sigtor">Significant Tornado</option>
+            <option value="scp">Supercell Composite</option>
+            <option value="ebwd">Effective Bulk Shear</option>
+            <option value="derecho">Derecho Composite</option>
+          </optgroup>
+          <optgroup label="Upper Air">
+            <option value="temp925">925mb Temperature</option>
+            <option value="wind925">925mb Wind</option>
+            <option value="temp850">850mb Temp/Wind</option>
+            <option value="temp700">700mb Temperature</option>
+            <option value="wind700">700mb Wind</option>
+            <option value="rh700">700mb RH</option>
+            <option value="hgt500">500mb Heights/Wind</option>
+            <option value="wind500">500mb Wind</option>
+            <option value="wind300">300mb Wind</option>
+            <option value="wind250">250mb Wind</option>
+            <option value="wind200">200mb Wind</option>
+            <option value="thick">1000-500mb Thickness</option>
+          </optgroup>
+          <optgroup label="Winter">
+            <option value="snow">Snowfall</option>
+            <option value="snowratio">Snow Ratio</option>
+            <option value="frzr">Freezing Rain</option>
+            <option value="sleet">Sleet/Ice Pellets</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- Overlays -->
+      <div class="sidebar-section" id="overlaySection">
+        <label>Overlays</label>
+        <div class="overlay-row"><input type="checkbox" id="ovContour"><label for="ovContour">Contours</label></div>
+        <div class="contour-controls" id="contourControls">
+          <div class="contour-slider-label">Interval</div>
+          <div class="contour-slider-row">
+            <input type="range" id="contourInterval" min="1" max="200" value="60">
+            <span class="contour-val" id="contourIntervalVal">60m</span>
+          </div>
+          <div class="contour-slider-label">Color</div>
+          <div class="contour-colors" id="contourColors">
+            <div class="contour-swatch active" data-color="ffffff" style="background:#ffffff" title="White"></div>
+            <div class="contour-swatch" data-color="000000" style="background:#000000" title="Black"></div>
+            <div class="contour-swatch" data-color="ffff00" style="background:#ffff00" title="Yellow"></div>
+            <div class="contour-swatch" data-color="00ffff" style="background:#00ffff" title="Cyan"></div>
+            <div class="contour-swatch" data-color="ff9800" style="background:#ff9800" title="Orange"></div>
+            <div class="contour-swatch" data-color="ff4081" style="background:#ff4081" title="Pink"></div>
+          </div>
+        </div>
+        <div class="overlay-row"><input type="checkbox" id="ovWindbarb"><label for="ovWindbarb">Wind Barbs</label></div>
+        <div class="overlay-row"><input type="checkbox" id="ovSfcObs"><label for="ovSfcObs">Surface Obs</label></div>
+        <div style="margin-top:4px">
+          <label style="font-size:10px;color:var(--text-dim)">Opacity</label>
+          <input type="range" id="opacitySlider" min="20" max="100" value="80" style="margin-top:2px">
+        </div>
+      </div>
+
+      <!-- Radar section (hidden in model mode) -->
+      <div class="sidebar-section" id="radarSection" style="display:none">
+        <label>Radar Site</label>
+        <input type="text" id="radarSiteFilter" placeholder="Filter sites..." style="width:100%;background:var(--bg-panel);color:var(--text-bright);border:1px solid var(--border);padding:4px 6px;font-size:12px;font-family:var(--font);outline:none;margin-bottom:4px">
+        <select id="radarSiteSelect" size="1">
+          <optgroup label="Northeast">
+            <option value="KBOX">KBOX - Boston</option>
+            <option value="KOKX">KOKX - NYC</option>
+            <option value="KDIX">KDIX - Philadelphia</option>
+            <option value="KBGM">KBGM - Binghamton</option>
+            <option value="KBUF">KBUF - Buffalo</option>
+            <option value="KENX">KENX - Albany</option>
+            <option value="KTYX">KTYX - Montague</option>
+            <option value="KCCX">KCCX - State College</option>
+            <option value="KPBZ">KPBZ - Pittsburgh</option>
+            <option value="KLWX">KLWX - Sterling</option>
+            <option value="KDOX">KDOX - Dover</option>
+          </optgroup>
+          <optgroup label="Southeast">
+            <option value="KFCX">KFCX - Roanoke</option>
+            <option value="KAKQ">KAKQ - Wakefield</option>
+            <option value="KMHX">KMHX - Newport</option>
+            <option value="KRAX">KRAX - Raleigh</option>
+            <option value="KLTX">KLTX - Wilmington</option>
+            <option value="KGSP">KGSP - Greer</option>
+            <option value="KCAE">KCAE - Columbia</option>
+            <option value="KCLX">KCLX - Charleston</option>
+            <option value="KJGX">KJGX - Robins AFB</option>
+            <option value="KFFC">KFFC - Peachtree City</option>
+            <option value="KVAX">KVAX - Moody AFB</option>
+            <option value="KJAX">KJAX - Jacksonville</option>
+            <option value="KMLB">KMLB - Melbourne</option>
+            <option value="KAMX">KAMX - Miami</option>
+            <option value="KTBW">KTBW - Tampa</option>
+            <option value="KTLH">KTLH - Tallahassee</option>
+            <option value="KEVX">KEVX - Eglin AFB</option>
+            <option value="KMOB">KMOB - Mobile</option>
+            <option value="KBMX">KBMX - Birmingham</option>
+            <option value="KHTX">KHTX - Huntsville</option>
+            <option value="KOHX">KOHX - Nashville</option>
+            <option value="KNQA">KNQA - Memphis</option>
+            <option value="KMRX">KMRX - Knoxville</option>
+            <option value="KGWX">KGWX - Columbus MS</option>
+          </optgroup>
+          <optgroup label="Great Lakes">
+            <option value="KLOT">KLOT - Chicago</option>
+            <option value="KILX">KILX - Lincoln IL</option>
+            <option value="KIND">KIND - Indianapolis</option>
+            <option value="KIWX">KIWX - Fort Wayne</option>
+            <option value="KVWX">KVWX - Evansville</option>
+            <option value="KDTX">KDTX - Detroit</option>
+            <option value="KAPX">KAPX - Gaylord</option>
+            <option value="KGRR">KGRR - Grand Rapids</option>
+            <option value="KMQT">KMQT - Marquette</option>
+            <option value="KGRB">KGRB - Green Bay</option>
+            <option value="KMKX">KMKX - Milwaukee</option>
+            <option value="KARX">KARX - La Crosse</option>
+            <option value="KDLH">KDLH - Duluth</option>
+            <option value="KMPX">KMPX - Minneapolis</option>
+          </optgroup>
+          <optgroup label="Central">
+            <option value="KLSX">KLSX - St Louis</option>
+            <option value="KSGF">KSGF - Springfield MO</option>
+            <option value="KEAX">KEAX - Kansas City</option>
+            <option value="KDVN">KDVN - Quad Cities</option>
+            <option value="KDMX">KDMX - Des Moines</option>
+            <option value="KOAX">KOAX - Omaha</option>
+            <option value="KUEX">KUEX - Hastings</option>
+            <option value="KLNX">KLNX - North Platte</option>
+            <option value="KGLD">KGLD - Goodland</option>
+            <option value="KDDC">KDDC - Dodge City</option>
+            <option value="KICT">KICT - Wichita</option>
+            <option value="KTWX">KTWX - Topeka</option>
+            <option value="KABR">KABR - Aberdeen</option>
+            <option value="KUDX">KUDX - Rapid City</option>
+            <option value="KBIS">KBIS - Bismarck</option>
+            <option value="KMVX">KMVX - Grand Forks</option>
+            <option value="KMBX">KMBX - Minot</option>
+            <option value="KFSD">KFSD - Sioux Falls</option>
+          </optgroup>
+          <optgroup label="Southern Plains">
+            <option value="KTLX">KTLX - Oklahoma City</option>
+            <option value="KINX">KINX - Tulsa</option>
+            <option value="KVNX">KVNX - Vance AFB</option>
+            <option value="KFDR">KFDR - Frederick</option>
+            <option value="KFWS">KFWS - Dallas</option>
+            <option value="KSJT">KSJT - San Angelo</option>
+            <option value="KEWX">KEWX - Austin</option>
+            <option value="KCRP">KCRP - Corpus Christi</option>
+            <option value="KBRO">KBRO - Brownsville</option>
+            <option value="KLBB">KLBB - Lubbock</option>
+            <option value="KAMA">KAMA - Amarillo</option>
+            <option value="KMAF">KMAF - Midland</option>
+            <option value="KDYX">KDYX - Dyess AFB</option>
+            <option value="KGRK">KGRK - Fort Hood</option>
+            <option value="KHGX">KHGX - Houston</option>
+            <option value="KLCH">KLCH - Lake Charles</option>
+            <option value="KPOE">KPOE - Fort Polk</option>
+            <option value="KSHV">KSHV - Shreveport</option>
+            <option value="KLZK">KLZK - Little Rock</option>
+          </optgroup>
+          <optgroup label="Mountain West">
+            <option value="KFTG">KFTG - Denver</option>
+            <option value="KPUX">KPUX - Pueblo</option>
+            <option value="KGJX">KGJX - Grand Junction</option>
+            <option value="KCYS">KCYS - Cheyenne</option>
+            <option value="KRIW">KRIW - Riverton</option>
+            <option value="KBLX">KBLX - Billings</option>
+            <option value="KTFX">KTFX - Great Falls</option>
+            <option value="KMSX">KMSX - Missoula</option>
+            <option value="KGGW">KGGW - Glasgow</option>
+            <option value="KSFX">KSFX - Pocatello</option>
+            <option value="KCBX">KCBX - Boise</option>
+            <option value="KICX">KICX - Cedar City</option>
+            <option value="KMTX">KMTX - Salt Lake City</option>
+            <option value="KFGZ">KFGZ - Flagstaff</option>
+            <option value="KIWA">KIWA - Phoenix</option>
+            <option value="KYUX">KYUX - Yuma</option>
+            <option value="KEMX">KEMX - Tucson</option>
+            <option value="KHDX">KHDX - Holloman</option>
+            <option value="KABX">KABX - Albuquerque</option>
+            <option value="KEPZ">KEPZ - El Paso</option>
+            <option value="KVBX">KVBX - Vandenberg</option>
+          </optgroup>
+          <optgroup label="West Coast">
+            <option value="KMAX">KMAX - Medford</option>
+            <option value="KRTX">KRTX - Portland</option>
+            <option value="KLGX">KLGX - Langley Hill</option>
+            <option value="KATX">KATX - Seattle</option>
+            <option value="KOTX">KOTX - Spokane</option>
+            <option value="KBHX">KBHX - Eureka</option>
+            <option value="KDAX">KDAX - Sacramento</option>
+            <option value="KMUX">KMUX - San Francisco</option>
+            <option value="KHNX">KHNX - Hanford</option>
+            <option value="KVTX">KVTX - Los Angeles</option>
+            <option value="KNKX">KNKX - San Diego</option>
+            <option value="KSOX">KSOX - Santa Ana</option>
+          </optgroup>
+          <optgroup label="Alaska / Hawaii / Territories">
+            <option value="PABC">PABC - Bethel</option>
+            <option value="PACG">PACG - Juneau</option>
+            <option value="PAEC">PAEC - Nome</option>
+            <option value="PAHG">PAHG - Anchorage</option>
+            <option value="PAIH">PAIH - Middleton</option>
+            <option value="PAKC">PAKC - King Salmon</option>
+            <option value="PAPD">PAPD - Fairbanks</option>
+            <option value="PHKI">PHKI - Kauai</option>
+            <option value="PHKM">PHKM - Kamuela</option>
+            <option value="PHMO">PHMO - Molokai</option>
+            <option value="PHWA">PHWA - South Shore</option>
+            <option value="TJUA">TJUA - San Juan</option>
+          </optgroup>
+        </select>
+        <label style="margin-top:6px">Product</label>
+        <select id="radarProdSelect">
+          <option value="REF">Reflectivity</option>
+          <option value="VEL">Velocity</option>
+        </select>
+        <label style="margin-top:6px">Scan Time</label>
+        <select id="radarScanSelect" style="font-size:11px">
+          <option value="">Latest</option>
+        </select>
+        <div id="radarScanStatus" style="font-size:10px;color:var(--text-dim);margin-top:2px"></div>
+      </div>
+
+      <!-- Forecast hours -->
+      <div class="fhour-list-label" style="padding:4px 10px 0" id="fhourLabel">Forecast Hour</div>
+      <div class="fhour-list" id="fhourList"></div>
+    </div>
+
+    <!-- Mobile sidebar toggle -->
+    <button class="mobile-toggle" id="mobileToggle">&#9776;</button>
+
+    <!-- Content area -->
+    <div class="content" id="content">
+      <!-- Info bar -->
+      <div class="info-bar" id="infoBar">
+        <span class="info-model" id="infoModel">HRRR</span>
+        <span class="info-sep">|</span>
+        <span class="info-label">Init:</span>
+        <span class="info-val" id="infoInit">--</span>
+        <span class="info-sep">|</span>
+        <span class="info-label">Valid:</span>
+        <span class="info-val" id="infoValid">--</span>
+        <span class="info-sep">|</span>
+        <span class="info-val" id="infoFhour">F00</span>
+        <span class="info-param" id="infoParam">Composite Reflectivity</span>
+      </div>
+
+      <!-- Scrubber bar -->
+      <div class="scrubber-bar">
+        <button id="btnPrev" title="Previous (,)">&#9664;</button>
+        <button id="btnPlay" title="Play/Pause (Space)">&#9654;</button>
+        <button id="btnNext" title="Next (.)">&#9654;</button>
+        <div class="scrubber-track" id="scrubberTrack">
+          <div class="scrubber-fill" id="scrubberFill"></div>
+          <div class="scrubber-handle" id="scrubberHandle"></div>
+        </div>
+        <span class="scrubber-time" id="scrubberTime">F00</span>
+        <select class="speed-select" id="speedSelect" title="Animation speed">
+          <option value="1000">1s</option>
+          <option value="500" selected>0.5s</option>
+          <option value="250">0.25s</option>
+          <option value="150">Fast</option>
+        </select>
+      </div>
+
+      <!-- Map -->
+      <div class="map-wrap" id="mapWrap">
+        <div id="map"></div>
+        <div class="cursor-readout" id="cursorReadout">
+          <div class="readout-val" id="readoutVal">--</div>
+          <div class="readout-coord" id="readoutCoord">--</div>
+        </div>
+        <div class="colorbar-wrap" id="colorbarWrap">
+          <img id="colorbarImg" src="" alt="">
+          <div class="colorbar-label" id="colorbarLabel"></div>
+        </div>
+        <div class="shortcuts-help">
+          <span><kbd>,</kbd> <kbd>.</kbd> fhour</span>
+          <span><kbd>[</kbd> <kbd>]</kbd> run</span>
+          <span><kbd>Space</kbd> play</span>
+          <span><kbd>R</kbd> readout</span>
+          <span><kbd>S</kbd> sounding</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sounding Modal -->
+<div class="modal-overlay" id="soundingModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="soundingTitle">Sounding</span>
+      <button class="modal-close" id="soundingClose">&times;</button>
+    </div>
+    <div class="modal-body" id="soundingBody">
+      <div style="color:var(--text-dim)">Click a point on the map with sounding mode enabled</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+(function(){
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════
+
+const MODELS = {
+  hrrr: { name:'HRRR', res:'3km', maxFhour:48, step:1, cycles:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] },
+  gfs:  { name:'GFS',  res:'0.25°', maxFhour:384, step:3, stepAfter240:12, cycles:[0,6,12,18] },
+  nam:  { name:'NAM',  res:'12km', maxFhour:84, step:3, cycles:[0,6,12,18] },
+  rap:  { name:'RAP',  res:'13km', maxFhour:21, step:1, cycles:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23] }
+};
+
+const VARS = {
+  t2m:      { var:'temperature', level:'2m',         label:'2m Temperature' },
+  td2m:     { var:'dewpoint',    level:'2m',         label:'2m Dewpoint' },
+  rh2m:     { var:'rh',          level:'2m',         label:'2m Relative Humidity' },
+  mslp:     { var:'mslp',        level:'surface',    label:'MSLP' },
+  sfcwind:  { var:'wind',        level:'10m',        label:'10m Wind' },
+  gust:     { var:'gust',        level:'surface',    label:'Wind Gust' },
+  refcmp:   { var:'refc',        level:'atmosphere', label:'Composite Reflectivity' },
+  precip:   { var:'precip',      level:'surface',    label:'QPF' },
+  pwat:     { var:'pwat',        level:'atmosphere', label:'Precipitable Water' },
+  tcc:      { var:'tcc',         level:'atmosphere', label:'Cloud Cover' },
+  cape:     { var:'cape',        level:'surface',    label:'SBCAPE' },
+  cin:      { var:'cin',         level:'surface',    label:'CIN' },
+  srh1:     { var:'helicity',    level:'0-1km',      label:'0-1km SRH' },
+  helicity: { var:'helicity',    level:'0-3km',      label:'0-3km SRH' },
+  uh:       { var:'mxuphl',      level:'2-5km',      label:'UH 2-5km' },
+  temp850:  { var:'temperature', level:'850mb',      label:'850mb Temperature' },
+  rh700:    { var:'rh',          level:'700mb',      label:'700mb RH' },
+  hgt500:   { var:'height',      level:'500mb',      label:'500mb Heights' },
+  wind500:  { var:'wind',        level:'500mb',      label:'500mb Wind' },
+  wind250:  { var:'wind',        level:'250mb',      label:'250mb Wind' },
+  snow:     { var:'snow',        level:'surface',    label:'Snowfall' },
+  // Surface additions
+  vis:      { var:'vis',         level:'surface',    label:'Visibility' },
+  li:       { var:'lftx',        level:'surface',    label:'Lifted Index' },
+  thetae:   { var:'thetae',      level:'2m',         label:'Theta-E' },
+  sfcpres:  { var:'pressure',    level:'surface',    label:'Surface Pressure' },
+  skt:      { var:'skt',         level:'surface',    label:'Skin Temperature' },
+  // Precipitation additions
+  frozn:    { var:'cpofp',       level:'surface',    label:'Frozen Precip %' },
+  prate:    { var:'prate',       level:'surface',    label:'Max Hourly Precip Rate' },
+  refd1km:  { var:'refd',        level:'1000m',      label:'Simulated Reflectivity 1km' },
+  // Instability additions
+  mlcape:   { var:'cape',        level:'90-0mb',     label:'MLCAPE' },
+  mucape:   { var:'cape',        level:'255-0mb',    label:'MUCAPE' },
+  stp:      { var:'stp',         level:'surface',    label:'Sig Tornado Parameter' },
+  sigtor:   { var:'sigtor',      level:'surface',    label:'Significant Tornado' },
+  shear06:  { var:'shear',       level:'0-6km',      label:'0-6km Shear' },
+  shear01:  { var:'shear',       level:'0-1km',      label:'0-1km Shear' },
+  esrh:     { var:'esrh',        level:'surface',    label:'Effective SRH' },
+  lclhgt:   { var:'lclhgt',      level:'surface',    label:'LCL Height' },
+  // Upper Air additions
+  temp925:  { var:'temperature', level:'925mb',      label:'925mb Temperature' },
+  wind925:  { var:'wind',        level:'925mb',      label:'925mb Wind' },
+  temp700:  { var:'temperature', level:'700mb',      label:'700mb Temperature' },
+  wind700:  { var:'wind',        level:'700mb',      label:'700mb Wind' },
+  wind300:  { var:'wind',        level:'300mb',      label:'300mb Wind' },
+  wind200:  { var:'wind',        level:'200mb',      label:'200mb Wind' },
+  thick:    { var:'thickness',   level:'1000-500mb', label:'1000-500mb Thickness' },
+  // Winter additions
+  snowratio:{ var:'snowratio',   level:'surface',    label:'Snow Ratio' },
+  frzr:     { var:'cfrzr',       level:'surface',    label:'Freezing Rain' },
+  sleet:    { var:'cicep',       level:'surface',    label:'Sleet/Ice Pellets' },
+  // Composite additions
+  ebwd:     { var:'ebwd',        level:'surface',    label:'Effective Bulk Shear' },
+  derecho:  { var:'derecho',     level:'surface',    label:'Derecho Composite' },
+  scp:      { var:'scp',         level:'surface',    label:'Supercell Composite' }
+};
+
+// Nearest sounding stations (rough lookup)
+const SOUNDING_STATIONS = [
+  {id:'OUN',lat:35.18,lon:-97.44},{id:'DDC',lat:37.77,lon:-99.97},
+  {id:'TOP',lat:39.07,lon:-95.63},{id:'SGF',lat:37.24,lon:-93.39},
+  {id:'ILX',lat:40.15,lon:-89.34},{id:'DVN',lat:41.61,lon:-90.58},
+  {id:'MPX',lat:44.85,lon:-93.57},{id:'OAX',lat:41.32,lon:-96.37},
+  {id:'FWD',lat:32.83,lon:-97.30},{id:'SHV',lat:32.45,lon:-93.84},
+  {id:'LBF',lat:41.13,lon:-100.68},{id:'ABR',lat:45.46,lon:-98.41},
+  {id:'BIS',lat:46.77,lon:-100.75},{id:'GJT',lat:39.12,lon:-108.53},
+  {id:'DNR',lat:39.77,lon:-104.88},{id:'AMA',lat:35.23,lon:-101.71},
+  {id:'LZK',lat:34.84,lon:-92.26},{id:'JAN',lat:32.32,lon:-90.08},
+  {id:'BMX',lat:33.17,lon:-86.77},{id:'BNA',lat:36.25,lon:-86.56}
+];
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+
+let state = {
+  tab: 'model',     // 'model' or 'radar'
+  model: 'hrrr',
+  param: 'refcmp',
+  fhour: 0,
+  radarSite: 'KTLX',
+  radarProd: 'REF',
+  radarScan: '',  // '' = latest, or specific NOMADS filename
+  runDate: null,   // null = latest, or 'YYYYMMDD'
+  runCycle: null,  // null = latest, or integer hour 0-23
+  overlays: { contour:false, windbarb:false, sfcobs:false },
+  contourInterval: 60,
+  contourColor: 'ffffff',
+  opacity: 0.8,
+  readoutEnabled: false,
+  soundingEnabled: false,
+  playing: false,
+  animSpeed: 500,
+  initTime: null,  // will be set from /api/status or SSE
+  modelRuns: {},   // { hrrr: {date,hour,init}, gfs: ... }
+  radarStatus: {}, // { KTLX: {age_secs}, ... }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// DOM REFS
+// ═══════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const modelSelect = $('modelSelect');
+const paramSelect = $('paramSelect');
+const fhourList = $('fhourList');
+const infoModel = $('infoModel');
+const infoInit = $('infoInit');
+const infoValid = $('infoValid');
+const infoFhour = $('infoFhour');
+const infoParam = $('infoParam');
+const colorbarImg = $('colorbarImg');
+const colorbarLabel = $('colorbarLabel');
+const cursorReadout = $('cursorReadout');
+const readoutVal = $('readoutVal');
+const readoutCoord = $('readoutCoord');
+const scrubberFill = $('scrubberFill');
+const scrubberHandle = $('scrubberHandle');
+const scrubberTime = $('scrubberTime');
+const statusDot = $('statusDot');
+const statusText = $('statusText');
+const soundingModal = $('soundingModal');
+const soundingBody = $('soundingBody');
+const soundingTitle = $('soundingTitle');
+
+// ═══════════════════════════════════════════════════════════════
+// MAP INIT
+// ═══════════════════════════════════════════════════════════════
+
+const map = L.map('map', {
+  center: [38.5, -96.5],
+  zoom: 5,
+  zoomControl: true,
+  attributionControl: false
+});
+
+// Dark basemap
+const darkBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19, subdomains: 'abcd'
+}).addTo(map);
+
+// Radar-specific black basemap (swapped when in radar mode)
+const radarBase = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19, subdomains: 'abcd'
+});
+
+// Tile layers we manage
+let modelLayer = null;
+let contourLayer = null;
+let windbarbLayer = null;
+let sfcobsLayer = null;
+let radarLayer = null;
+
+// ═══════════════════════════════════════════════════════════════
+// TILE LAYER MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+function clearModelLayers() {
+  [modelLayer, contourLayer, windbarbLayer, sfcobsLayer, radarLayer].forEach(l => {
+    if(l) map.removeLayer(l);
+  });
+  modelLayer = contourLayer = windbarbLayer = sfcobsLayer = radarLayer = null;
+}
+
+// Swap a tile layer without flashing: add new layer beneath, wait for load, remove old
+function swapLayer(oldLayer, newUrl, opts) {
+  const newLayer = L.tileLayer(newUrl, opts).addTo(map);
+  if(oldLayer) {
+    // Keep old layer visible until new tiles are loaded
+    newLayer.once('load', function() {
+      map.removeLayer(oldLayer);
+    });
+    // Failsafe: if load never fires (all tiles error), remove old after timeout
+    setTimeout(function() {
+      if(map.hasLayer(oldLayer)) map.removeLayer(oldLayer);
+    }, 6000);
+  }
+  return newLayer;
+}
+
+function runQueryParam() {
+  if(state.runDate && state.runCycle !== null) {
+    return '&run=' + state.runDate + '/' + String(state.runCycle).padStart(2,'0') + 'z';
+  }
+  return '';
+}
+
+function buildModelTileUrl() {
+  const v = VARS[state.param];
+  if(!v) return null;
+  const fh = String(state.fhour).padStart(2,'0');
+  return `/tiles/${state.model}/${v.var}/${v.level}/f${fh}/{z}/{x}/{y}.png?style=nws` + runQueryParam();
+}
+
+function buildContourUrl() {
+  const v = VARS[state.param];
+  if(!v) return null;
+  const fh = String(state.fhour).padStart(2,'0');
+  return `/tiles/contour/${state.model}/${v.var}/${v.level}/f${fh}/{z}/{x}/{y}.png?interval=${state.contourInterval}&color=${state.contourColor}&width=2.0` + runQueryParam();
+}
+
+// Smart default contour intervals per variable type
+function getDefaultContourInterval(paramKey) {
+  const defaults = {
+    // Heights (m) — 60m standard
+    hgt500: 60, thick: 60,
+    // Pressure (hPa) — 4 hPa
+    mslp: 4, sfcpres: 4,
+    // Temperature (F/K) — 5 deg
+    t2m: 5, td2m: 5, temp850: 5, temp925: 5, temp700: 5, skt: 5, thetae: 5,
+    // Wind (kts) — 10 kts
+    sfcwind: 10, gust: 10, wind500: 20, wind250: 20, wind300: 20, wind200: 20, wind925: 10, wind700: 10,
+    // RH (%) — 10%
+    rh2m: 10, rh700: 10,
+    // Reflectivity (dBZ) — 10 dBZ
+    refcmp: 10, refd1km: 10,
+    // CAPE (J/kg) — 250
+    cape: 250, mlcape: 250, mucape: 250,
+    // CIN (J/kg) — 25
+    cin: 25,
+    // Precipitation — 0.25 in
+    precip: 25, prate: 5,
+    // Shear (kts) — 10
+    shear06: 10, shear01: 5, ebwd: 10,
+    // Helicity (m2/s2) — 50
+    srh1: 50, helicity: 100, esrh: 50,
+    // Composite params — 1
+    stp: 1, sigtor: 1, scp: 1, derecho: 1, uh: 25,
+    // Other
+    pwat: 5, tcc: 10, snow: 2, vis: 1, li: 2,
+    lclhgt: 250, frozn: 10, snowratio: 5, frzr: 10, sleet: 10
+  };
+  return defaults[paramKey] || 30;
+}
+
+// Get unit suffix for contour interval display
+function getContourUnit(paramKey) {
+  const units = {
+    hgt500:'m', thick:'m',
+    mslp:'hPa', sfcpres:'hPa',
+    t2m:'°', td2m:'°', temp850:'°', temp925:'°', temp700:'°', skt:'°', thetae:'°',
+    sfcwind:'kt', gust:'kt', wind500:'kt', wind250:'kt', wind300:'kt', wind200:'kt', wind925:'kt', wind700:'kt',
+    rh2m:'%', rh700:'%', tcc:'%', frozn:'%',
+    refcmp:'dBZ', refd1km:'dBZ',
+    cape:'', mlcape:'', mucape:'', cin:'',
+    precip:'', prate:'', srh1:'', helicity:'', esrh:'',
+    pwat:'mm', snow:'in', vis:'mi', li:'',
+    shear06:'kt', shear01:'kt', ebwd:'kt',
+    stp:'', sigtor:'', scp:'', derecho:'', uh:''
+  };
+  return units[paramKey] || '';
+}
+
+function buildWindbarbUrl() {
+  const v = VARS[state.param];
+  const rawLevel = v ? v.level : '10m';
+  const upperAirLevels = ['250mb','300mb','500mb','700mb','850mb','925mb'];
+  const level = upperAirLevels.includes(rawLevel) ? rawLevel : '10m';
+  const fh = String(state.fhour).padStart(2,'0');
+  const rp = runQueryParam();
+  return `/tiles/wind/${state.model}/${level}/f${fh}/{z}/{x}/{y}.png` + (rp ? '?' + rp.slice(1) : '');
+}
+
+function buildRadarUrl() {
+  const base = `/tiles/radar/${state.radarSite}/${state.radarProd}/{z}/{x}/{y}.png`;
+  return state.radarScan ? base + '?scan=' + encodeURIComponent(state.radarScan) : base;
+}
+
+function updateTileLayers() {
+  if(state.tab === 'radar') {
+    // Clear non-radar layers immediately
+    [modelLayer, contourLayer, windbarbLayer, sfcobsLayer].forEach(l => {
+      if(l) map.removeLayer(l);
+    });
+    modelLayer = contourLayer = windbarbLayer = sfcobsLayer = null;
+    // Swap radar layer smoothly
+    radarLayer = swapLayer(radarLayer, buildRadarUrl(), {
+      maxZoom:12, opacity:state.opacity, errorTileUrl:''
+    });
+    return;
+  }
+
+  // Clear radar if switching from radar mode
+  if(radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+
+  const url = buildModelTileUrl();
+  if(!url) return;
+
+  // Swap model layer — old stays visible until new loads
+  modelLayer = swapLayer(modelLayer, url, {
+    maxZoom:12, opacity:state.opacity, errorTileUrl:''
+  });
+
+  // Overlays: swap if active, remove if inactive
+  if(state.overlays.contour) {
+    contourLayer = swapLayer(contourLayer, buildContourUrl(), {
+      maxZoom:12, opacity:0.7, errorTileUrl:''
+    });
+  } else if(contourLayer) {
+    map.removeLayer(contourLayer); contourLayer = null;
+  }
+
+  if(state.overlays.windbarb) {
+    windbarbLayer = swapLayer(windbarbLayer, buildWindbarbUrl(), {
+      maxZoom:12, opacity:0.8, errorTileUrl:''
+    });
+  } else if(windbarbLayer) {
+    map.removeLayer(windbarbLayer); windbarbLayer = null;
+  }
+
+  if(state.overlays.sfcobs) {
+    if(!sfcobsLayer) {
+      sfcobsLayer = L.tileLayer('/tiles/surface/{z}/{x}/{y}.png', {
+        maxZoom:12, opacity:0.9, errorTileUrl:''
+      }).addTo(map);
+    }
+  } else if(sfcobsLayer) {
+    map.removeLayer(sfcobsLayer); sfcobsLayer = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORECAST HOUR BUTTONS
+// ═══════════════════════════════════════════════════════════════
+
+function buildFhourList() {
+  fhourList.innerHTML = '';
+  if(state.tab === 'radar') {
+    $('fhourLabel').textContent = '';
+    return;
+  }
+  $('fhourLabel').textContent = 'Forecast Hour';
+  const cfg = MODELS[state.model];
+  const hours = [];
+  for(let h=0; h<=cfg.maxFhour; ) {
+    hours.push(h);
+    if(cfg.stepAfter240 && h >= 240) h += cfg.stepAfter240;
+    else h += cfg.step;
+  }
+  hours.forEach(h => {
+    const btn = document.createElement('button');
+    btn.className = 'fhour-btn' + (h===state.fhour?' active':'');
+    btn.textContent = 'F' + String(h).padStart(2,'0');
+    btn.dataset.fhour = h;
+    btn.addEventListener('click', () => setFhour(h));
+    fhourList.appendChild(btn);
+  });
+}
+
+function highlightFhourBtn() {
+  fhourList.querySelectorAll('.fhour-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.fhour) === state.fhour);
+  });
+  // Scroll active into view
+  const active = fhourList.querySelector('.fhour-btn.active');
+  if(active) active.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INFO BAR
+// ═══════════════════════════════════════════════════════════════
+
+function updateInfoBar() {
+  if(state.tab === 'radar') {
+    infoModel.textContent = state.radarSite;
+    // Show radar scan age if available
+    const rstat = state.radarStatus[state.radarSite.toUpperCase()];
+    if(rstat) {
+      const ageSec = rstat.age_secs;
+      const ageStr = ageSec < 60 ? ageSec + 's ago' : Math.round(ageSec/60) + 'min ago';
+      infoInit.textContent = 'Scan ' + ageStr;
+    } else {
+      infoInit.textContent = 'Live';
+    }
+    // If a specific scan is selected, show its time in the info bar
+    if(state.radarScan) {
+      const scanSel = $('radarScanSelect');
+      const selectedOpt = scanSel.options[scanSel.selectedIndex];
+      if(selectedOpt) infoInit.textContent = 'Scan: ' + selectedOpt.textContent;
+    }
+    infoValid.textContent = new Date().toUTCString().replace('GMT','UTC');
+    infoFhour.textContent = state.radarProd;
+    infoParam.textContent = state.radarProd === 'REF' ? 'Base Reflectivity' : 'Base Velocity';
+    return;
+  }
+
+  const cfg = MODELS[state.model];
+  infoModel.textContent = cfg.name;
+
+  // Use selected run date/cycle, real init time from server, or estimate
+  let init;
+  let initStr;
+  if(state.runDate && state.runCycle !== null) {
+    const d = state.runDate;
+    const yr = parseInt(d.substring(0,4));
+    const mo = parseInt(d.substring(4,6)) - 1;
+    const dy = parseInt(d.substring(6,8));
+    init = new Date(Date.UTC(yr, mo, dy, state.runCycle));
+    initStr = d + ' ' + String(state.runCycle).padStart(2,'0') + 'z';
+  } else {
+    const runInfo = state.modelRuns[state.model];
+    if(runInfo && runInfo.date && runInfo.hour !== undefined) {
+      const d = runInfo.date; // e.g. "20260311"
+      const yr = parseInt(d.substring(0,4));
+      const mo = parseInt(d.substring(4,6)) - 1;
+      const dy = parseInt(d.substring(6,8));
+      const hr = runInfo.hour;
+      init = new Date(Date.UTC(yr, mo, dy, hr));
+      initStr = d + ' ' + String(hr).padStart(2,'0') + 'z';
+    } else {
+      const now = new Date();
+      const initHour = Math.floor(now.getUTCHours()/6)*6;
+      init = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), initHour));
+      initStr = init.getUTCFullYear() +
+        String(init.getUTCMonth()+1).padStart(2,'0') +
+        String(init.getUTCDate()).padStart(2,'0') + ' ' +
+        String(init.getUTCHours()).padStart(2,'0') + 'z';
+      initStr += ' (est)';
+    }
+  }
+  infoInit.textContent = initStr;
+
+  const valid = new Date(init.getTime() + state.fhour*3600000);
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const validStr = days[valid.getUTCDay()] + ' ' + months[valid.getUTCMonth()] + ' ' +
+    String(valid.getUTCDate()).padStart(2,'0') + ' ' + valid.getUTCFullYear() + ' ' +
+    String(valid.getUTCHours()).padStart(2,'0') + ':' +
+    String(valid.getUTCMinutes()).padStart(2,'0') + ' UTC';
+  infoValid.textContent = validStr;
+  infoFhour.textContent = 'F' + String(state.fhour).padStart(2,'0');
+
+  const v = VARS[state.param];
+  infoParam.textContent = v ? v.label : state.param;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COLORBAR
+// ═══════════════════════════════════════════════════════════════
+
+function updateColorbar() {
+  if(state.tab === 'radar') {
+    const prod = state.radarProd.toLowerCase();
+    colorbarImg.src = `/api/legend/${prod === 'ref' ? 'refc' : 'velocity'}?style=nws`;
+    colorbarLabel.textContent = state.radarProd === 'REF' ? 'dBZ' : 'kt';
+    $('colorbarWrap').style.display = '';
+    return;
+  }
+  const v = VARS[state.param];
+  if(!v) { $('colorbarWrap').style.display = 'none'; return; }
+  colorbarImg.src = `/api/legend/${v.var}?style=nws`;
+  colorbarLabel.textContent = v.label;
+  $('colorbarWrap').style.display = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCRUBBER
+// ═══════════════════════════════════════════════════════════════
+
+function updateScrubber() {
+  const cfg = MODELS[state.model];
+  const maxF = cfg ? cfg.maxFhour : 48;
+  const pct = maxF > 0 ? (state.fhour / maxF * 100) : 0;
+  scrubberFill.style.width = pct + '%';
+  scrubberHandle.style.left = pct + '%';
+  scrubberTime.textContent = 'F' + String(state.fhour).padStart(2,'0');
+}
+
+// Scrubber click/drag
+(function(){
+  const track = $('scrubberTrack');
+  let dragging = false;
+
+  function scrubTo(e) {
+    const rect = track.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const cfg = MODELS[state.model];
+    const maxF = cfg ? cfg.maxFhour : 48;
+    const step = cfg ? cfg.step : 1;
+    let raw = Math.round(pct * maxF);
+    raw = Math.round(raw / step) * step;
+    setFhour(Math.min(raw, maxF));
+  }
+
+  track.addEventListener('mousedown', e => { dragging=true; scrubTo(e); });
+  document.addEventListener('mousemove', e => { if(dragging) scrubTo(e); });
+  document.addEventListener('mouseup', () => { dragging=false; });
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// STATE SETTERS
+// ═══════════════════════════════════════════════════════════════
+
+function setFhour(h) {
+  state.fhour = h;
+  highlightFhourBtn();
+  updateScrubber();
+  updateInfoBar();
+  updateTileLayers();
+  syncHash();
+}
+
+function setModel(m) {
+  state.model = m;
+  state.fhour = 0;
+  modelSelect.value = m;
+  buildFhourList();
+  updateScrubber();
+  updateInfoBar();
+  updateColorbar();
+  updateTileLayers();
+  syncHash();
+}
+
+function setParam(p) {
+  state.param = p;
+  paramSelect.value = p;
+  // Update contour interval to smart default for the new variable
+  const defInterval = getDefaultContourInterval(p);
+  state.contourInterval = defInterval;
+  $('contourInterval').value = defInterval;
+  $('contourIntervalVal').textContent = defInterval + getContourUnit(p);
+  updateInfoBar();
+  updateColorbar();
+  updateTileLayers();
+  syncHash();
+}
+
+function setTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.top-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tab));
+
+  const isRadar = tab === 'radar';
+  $('app').classList.toggle('radar-mode', isRadar);
+  $('modelSection').style.display = isRadar ? 'none' : '';
+  $('paramSection').style.display = isRadar ? 'none' : '';
+  $('overlaySection').style.display = isRadar ? 'none' : '';
+  $('radarSection').style.display = isRadar ? '' : 'none';
+
+  if(isRadar) {
+    map.removeLayer(darkBase);
+    radarBase.addTo(map);
+    fetchRadarScans(state.radarSite);
+  } else {
+    map.removeLayer(radarBase);
+    darkBase.addTo(map);
+  }
+
+  buildFhourList();
+  updateInfoBar();
+  updateColorbar();
+  updateTileLayers();
+  syncHash();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RUN DATE/CYCLE PICKER
+// ═══════════════════════════════════════════════════════════════
+
+function buildCycleGrid() {
+  const sel = $('cycleSelect');
+  sel.innerHTML = '';
+  const cfg = MODELS[state.model];
+  const cycles = cfg ? cfg.cycles : [0,6,12,18];
+  cycles.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = String(c).padStart(2,'0') + 'z';
+    if(state.runCycle === c) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+$('cycleSelect').addEventListener('change', function() {
+  const c = parseInt(this.value);
+  if(!state.runDate) {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth()+1).padStart(2,'0');
+    const d = String(now.getUTCDate()).padStart(2,'0');
+    state.runDate = y + m + d;
+    $('runDateInput').value = y + '-' + m + '-' + d;
+  }
+  state.runCycle = c;
+  $('runLatestBtn').classList.remove('active');
+  updateInfoBar();
+  updateTileLayers();
+  syncHash();
+});
+
+function highlightCycleBtn() {
+  const sel = $('cycleSelect');
+  if(state.runCycle !== null) sel.value = state.runCycle;
+}
+
+function setRunLatest() {
+  state.runDate = null;
+  state.runCycle = null;
+  $('runDateInput').value = '';
+  $('runLatestBtn').classList.add('active');
+  highlightCycleBtn();
+  updateInfoBar();
+  updateTileLayers();
+  syncHash();
+}
+
+$('runLatestBtn').addEventListener('click', setRunLatest);
+
+$('runDateInput').addEventListener('change', function() {
+  const val = this.value; // YYYY-MM-DD
+  if(!val) {
+    setRunLatest();
+    return;
+  }
+  state.runDate = val.replace(/-/g, '');
+  $('runLatestBtn').classList.remove('active');
+  // If no cycle selected, pick the first available
+  if(state.runCycle === null) {
+    const cfg = MODELS[state.model];
+    state.runCycle = cfg.cycles[0];
+    highlightCycleBtn();
+  }
+  updateInfoBar();
+  updateTileLayers();
+  syncHash();
+});
+
+// Rebuild cycle grid when model changes
+const _origSetModel = setModel;
+setModel = function(m) {
+  _origSetModel(m);
+  buildCycleGrid();
+};
+
+// Initial build
+buildCycleGrid();
+
+// ═══════════════════════════════════════════════════════════════
+// ANIMATION
+// ═══════════════════════════════════════════════════════════════
+
+let animTimer = null;
+
+function getFhourList() {
+  const cfg = MODELS[state.model];
+  const hours = [];
+  for(let h=0; h<=cfg.maxFhour; ) {
+    hours.push(h);
+    if(cfg.stepAfter240 && h >= 240) h += cfg.stepAfter240;
+    else h += cfg.step;
+  }
+  return hours;
+}
+
+function stepFhour(dir) {
+  if(state.tab === 'radar') return;
+  const hours = getFhourList();
+  const idx = hours.indexOf(state.fhour);
+  const next = idx + dir;
+  if(next >= 0 && next < hours.length) setFhour(hours[next]);
+  else if(dir > 0) setFhour(hours[0]); // wrap
+  // Prefetch next frame's tiles into browser cache
+  if(state.playing) prefetchNext(dir);
+}
+
+// Prefetch: load tiles for the next frame into browser cache so swap is instant
+function prefetchNext(dir) {
+  const hours = getFhourList();
+  const curIdx = hours.indexOf(state.fhour);
+  const peekIdx = curIdx + dir;
+  const peekHour = peekIdx >= 0 && peekIdx < hours.length ? hours[peekIdx] : hours[0];
+  const fh = String(peekHour).padStart(2,'0');
+  const v = VARS[state.param];
+  if(!v) return;
+  const bounds = map.getBounds();
+  const zoom = map.getZoom();
+  // Get visible tile coordinates
+  const tileSize = 256;
+  const nw = map.project(bounds.getNorthWest(), zoom).divideBy(tileSize).floor();
+  const se = map.project(bounds.getSouthEast(), zoom).divideBy(tileSize).floor();
+  const rp = runQueryParam();
+  for(let x = nw.x; x <= se.x; x++) {
+    for(let y = nw.y; y <= se.y; y++) {
+      const url = `/tiles/${state.model}/${v.var}/${v.level}/f${fh}/${zoom}/${x}/${y}.png?style=nws` + rp;
+      const img = new Image();
+      img.src = url;
+    }
+  }
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  $('btnPlay').classList.toggle('playing', state.playing);
+  $('btnPlay').innerHTML = state.playing ? '&#9646;&#9646;' : '&#9654;';
+  if(state.playing) {
+    animTimer = setInterval(() => stepFhour(1), state.animSpeed);
+  } else {
+    clearInterval(animTimer);
+    animTimer = null;
+  }
+}
+
+function updateAnimSpeed() {
+  state.animSpeed = parseInt($('speedSelect').value);
+  if(state.playing) {
+    clearInterval(animTimer);
+    animTimer = setInterval(() => stepFhour(1), state.animSpeed);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// URL HASH STATE
+// ═══════════════════════════════════════════════════════════════
+
+function syncHash() {
+  const parts = [];
+  if(state.tab === 'radar') {
+    parts.push('tab=radar', 'site='+state.radarSite, 'prod='+state.radarProd);
+    if(state.radarScan) parts.push('scan='+encodeURIComponent(state.radarScan));
+  } else {
+    parts.push('model='+state.model, 'var='+state.param, 'fhour='+state.fhour);
+    if(state.runDate && state.runCycle !== null) {
+      parts.push('run='+state.runDate+'/'+String(state.runCycle).padStart(2,'0')+'z');
+    }
+  }
+  const hash = parts.join('&');
+  if(location.hash.slice(1) !== hash) {
+    history.replaceState(null, '', '#'+hash);
+  }
+}
+
+function loadHash() {
+  const hash = location.hash.slice(1);
+  if(!hash) return;
+  const params = {};
+  hash.split('&').forEach(kv => {
+    const [k,v] = kv.split('=');
+    if(k && v) params[k] = v;
+  });
+  if(params.tab === 'radar') {
+    if(params.site) state.radarSite = params.site;
+    if(params.prod) state.radarProd = params.prod;
+    if(params.scan) state.radarScan = decodeURIComponent(params.scan);
+    setTab('radar');
+    $('radarSiteSelect').value = state.radarSite;
+    $('radarProdSelect').value = state.radarProd;
+  } else {
+    if(params.model && MODELS[params.model]) state.model = params.model;
+    if(params.var && VARS[params.var]) state.param = params.var;
+    if(params.fhour !== undefined) state.fhour = parseInt(params.fhour) || 0;
+    if(params.run) {
+      // parse run=YYYYMMDD/HHz
+      const rm = params.run.match(/^(\d{8})\/(\d{2})z$/);
+      if(rm) {
+        state.runDate = rm[1];
+        state.runCycle = parseInt(rm[2]);
+        const rd = state.runDate;
+        $('runDateInput').value = rd.substring(0,4)+'-'+rd.substring(4,6)+'-'+rd.substring(6,8);
+        $('runLatestBtn').classList.remove('active');
+        if(typeof buildCycleGrid === 'function') buildCycleGrid();
+      }
+    }
+    modelSelect.value = state.model;
+    paramSelect.value = state.param;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CURSOR READOUT
+// ═══════════════════════════════════════════════════════════════
+
+let readoutTimer = null;
+let readoutAbort = null;
+
+function toggleReadout() {
+  state.readoutEnabled = !state.readoutEnabled;
+  cursorReadout.classList.toggle('visible', state.readoutEnabled);
+  if(!state.readoutEnabled) {
+    readoutVal.textContent = '--';
+    readoutCoord.textContent = '--';
+    if(readoutTimer) { clearTimeout(readoutTimer); readoutTimer = null; }
+    if(readoutAbort) { readoutAbort.abort(); readoutAbort = null; }
+  }
+  toast(state.readoutEnabled ? 'Readout ON' : 'Readout OFF', 'success');
+}
+
+function fetchReadoutValue(lat, lon) {
+  if(readoutAbort) readoutAbort.abort();
+  readoutAbort = new AbortController();
+
+  const v = VARS[state.param];
+  if(!v) return;
+
+  const url = '/api/value?lat=' + lat.toFixed(4) + '&lon=' + lon.toFixed(4)
+    + '&model=' + state.model + '&var=' + v.var + '&level=' + v.level
+    + '&fhour=' + state.fhour + runQueryParam();
+
+  fetch(url, { signal: readoutAbort.signal })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if(d.value !== null && d.value !== undefined) {
+        readoutVal.textContent = d.value.toFixed(1) + ' ' + (d.units || '');
+      } else {
+        readoutVal.textContent = '--';
+      }
+    })
+    .catch(function(e) {
+      if(e.name !== 'AbortError') readoutVal.textContent = '--';
+    });
+}
+
+map.on('mousemove', function(e) {
+  if(!state.readoutEnabled) return;
+  var lat = e.latlng.lat;
+  var lon = e.latlng.lng;
+  readoutCoord.textContent = lat.toFixed(3) + ', ' + lon.toFixed(3);
+
+  // Debounce server queries (150ms) to avoid flooding
+  if(readoutTimer) clearTimeout(readoutTimer);
+  readoutTimer = setTimeout(function() { fetchReadoutValue(lat, lon); }, 150);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// SOUNDING ON CLICK
+// ═══════════════════════════════════════════════════════════════
+
+function toggleSounding() {
+  state.soundingEnabled = !state.soundingEnabled;
+  map.getContainer().style.cursor = state.soundingEnabled ? 'crosshair' : '';
+  toast(state.soundingEnabled ? 'Sounding mode ON — click map' : 'Sounding mode OFF', 'success');
+}
+
+function findNearestStation(lat, lon) {
+  let best = SOUNDING_STATIONS[0], bestDist = 1e9;
+  SOUNDING_STATIONS.forEach(s => {
+    const d = Math.pow(s.lat-lat,2) + Math.pow(s.lon-lon,2);
+    if(d < bestDist) { bestDist = d; best = s; }
+  });
+  return best;
+}
+
+map.on('click', function(e) {
+  if(!state.soundingEnabled) return;
+  const station = findNearestStation(e.latlng.lat, e.latlng.lng);
+  soundingTitle.textContent = 'Sounding — ' + station.id + ' (' + station.lat.toFixed(2) + ', ' + station.lon.toFixed(2) + ')';
+  soundingBody.innerHTML = '<div style="color:var(--text-dim);padding:20px">Loading sounding for ' + station.id + '...</div>';
+  soundingModal.classList.add('visible');
+
+  const img = new Image();
+  img.onload = () => { soundingBody.innerHTML = ''; soundingBody.appendChild(img); };
+  img.onerror = () => {
+    soundingBody.innerHTML = '<div style="color:var(--danger);padding:20px">Failed to load sounding for ' + station.id + '</div>';
+  };
+  img.src = '/api/sounding/' + station.id;
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '75vh';
+});
+
+$('soundingClose').addEventListener('click', () => soundingModal.classList.remove('visible'));
+soundingModal.addEventListener('click', e => {
+  if(e.target === soundingModal) soundingModal.classList.remove('visible');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════════
+
+document.addEventListener('keydown', function(e) {
+  if(e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  switch(e.key) {
+    case ',': case '<': e.preventDefault(); stepFhour(-1); break;
+    case '.': case '>': e.preventDefault(); stepFhour(1); break;
+    case '[': e.preventDefault(); /* prev run — future */ toast('Previous run (not yet implemented)', 'warn'); break;
+    case ']': e.preventDefault(); /* next run — future */ toast('Next run (not yet implemented)', 'warn'); break;
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'r': case 'R': toggleReadout(); break;
+    case 's': case 'S': toggleSounding(); break;
+    case 'Escape': soundingModal.classList.remove('visible'); break;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// OVERLAYS
+// ═══════════════════════════════════════════════════════════════
+
+$('ovContour').addEventListener('change', function() {
+  state.overlays.contour = this.checked;
+  $('contourControls').classList.toggle('visible', this.checked);
+  updateTileLayers();
+});
+
+// Contour interval slider
+$('contourInterval').addEventListener('input', function() {
+  state.contourInterval = parseInt(this.value);
+  $('contourIntervalVal').textContent = state.contourInterval + getContourUnit(state.param);
+  if(state.overlays.contour) updateTileLayers();
+});
+
+// Contour color swatches
+document.querySelectorAll('#contourColors .contour-swatch').forEach(sw => {
+  sw.addEventListener('click', function() {
+    document.querySelectorAll('#contourColors .contour-swatch').forEach(s => s.classList.remove('active'));
+    this.classList.add('active');
+    state.contourColor = this.dataset.color;
+    if(state.overlays.contour) updateTileLayers();
+  });
+});
+$('ovWindbarb').addEventListener('change', function() {
+  state.overlays.windbarb = this.checked;
+  updateTileLayers();
+});
+$('ovSfcObs').addEventListener('change', function() {
+  state.overlays.sfcobs = this.checked;
+  updateTileLayers();
+});
+$('opacitySlider').addEventListener('input', function() {
+  state.opacity = parseInt(this.value) / 100;
+  if(modelLayer) modelLayer.setOpacity(state.opacity);
+  if(radarLayer) radarLayer.setOpacity(state.opacity);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// RADAR SCAN HISTORY
+// ═══════════════════════════════════════════════════════════════
+
+let radarScanAbort = null;
+
+function fetchRadarScans(site) {
+  if(radarScanAbort) radarScanAbort.abort();
+  radarScanAbort = new AbortController();
+  const sel = $('radarScanSelect');
+  const status = $('radarScanStatus');
+  status.textContent = 'Loading scans...';
+
+  fetch('/api/radar/scans/' + encodeURIComponent(site), { signal: radarScanAbort.signal })
+    .then(r => r.json())
+    .then(data => {
+      // Clear existing options except "Latest"
+      while(sel.options.length > 1) sel.remove(1);
+      if(!data.scans || data.scans.length === 0) {
+        status.textContent = 'No scans available';
+        return;
+      }
+      const now = Date.now();
+      data.scans.forEach(function(s) {
+        const opt = document.createElement('option');
+        opt.value = s.filename;
+        // Format the display text
+        let label = s.filename;
+        if(s.timestamp) {
+          try {
+            const d = new Date(s.timestamp);
+            if(!isNaN(d.getTime())) {
+              const diffMs = now - d.getTime();
+              const diffMin = Math.round(diffMs / 60000);
+              const timeStr = d.toISOString().slice(11,16) + ' UTC';
+              if(diffMin < 1) label = timeStr + ' (just now)';
+              else if(diffMin < 60) label = timeStr + ' (' + diffMin + ' min ago)';
+              else if(diffMin < 1440) label = timeStr + ' (' + Math.round(diffMin/60) + 'h ago)';
+              else label = d.toISOString().slice(0,16).replace('T',' ') + ' UTC';
+            }
+          } catch(e) { /* use filename */ }
+        }
+        opt.textContent = label;
+        sel.appendChild(opt);
+      });
+      // Keep current selection if still valid
+      if(state.radarScan && sel.querySelector('option[value="' + state.radarScan + '"]')) {
+        sel.value = state.radarScan;
+      } else {
+        sel.value = '';
+        state.radarScan = '';
+      }
+      status.textContent = data.scans.length + ' scans available';
+    })
+    .catch(function(e) {
+      if(e.name !== 'AbortError') {
+        status.textContent = 'Failed to load scans';
+      }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT LISTENERS
+// ═══════════════════════════════════════════════════════════════
+
+modelSelect.addEventListener('change', () => setModel(modelSelect.value));
+paramSelect.addEventListener('change', () => setParam(paramSelect.value));
+
+$('radarSiteSelect').addEventListener('change', function() {
+  state.radarSite = this.value;
+  state.radarScan = '';
+  $('radarScanSelect').value = '';
+  updateInfoBar();
+  updateTileLayers();
+  syncHash();
+  fetchRadarScans(state.radarSite);
+});
+$('radarProdSelect').addEventListener('change', function() {
+  state.radarProd = this.value;
+  updateInfoBar();
+  updateColorbar();
+  updateTileLayers();
+  syncHash();
+});
+$('radarScanSelect').addEventListener('change', function() {
+  state.radarScan = this.value;
+  updateInfoBar();
+  updateTileLayers();
+  syncHash();
+});
+
+// Radar site filter
+(function() {
+  var filterInput = $('radarSiteFilter');
+  var sel = $('radarSiteSelect');
+  var allOptions = [];
+  // Cache all options with their group labels
+  Array.from(sel.querySelectorAll('optgroup')).forEach(function(og) {
+    var groupLabel = og.getAttribute('label');
+    Array.from(og.querySelectorAll('option')).forEach(function(opt) {
+      allOptions.push({ value: opt.value, text: opt.textContent, group: groupLabel });
+    });
+  });
+
+  filterInput.addEventListener('input', function() {
+    var query = this.value.trim().toUpperCase();
+    // Remove all existing content
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    if (!query) {
+      // Restore full grouped list
+      var groups = {};
+      var groupOrder = [];
+      allOptions.forEach(function(o) {
+        if (!groups[o.group]) { groups[o.group] = []; groupOrder.push(o.group); }
+        groups[o.group].push(o);
+      });
+      groupOrder.forEach(function(g) {
+        var og = document.createElement('optgroup');
+        og.label = g;
+        groups[g].forEach(function(o) {
+          var opt = document.createElement('option');
+          opt.value = o.value;
+          opt.textContent = o.text;
+          og.appendChild(opt);
+        });
+        sel.appendChild(og);
+      });
+    } else {
+      // Show flat filtered list
+      allOptions.forEach(function(o) {
+        if (o.value.toUpperCase().indexOf(query) !== -1 || o.text.toUpperCase().indexOf(query) !== -1) {
+          var opt = document.createElement('option');
+          opt.value = o.value;
+          opt.textContent = o.text;
+          sel.appendChild(opt);
+        }
+      });
+    }
+    // Keep current selection if still in list
+    if (sel.querySelector('option[value="' + state.radarSite + '"]')) {
+      sel.value = state.radarSite;
+    }
+  });
+
+  filterInput.addEventListener('focus', function() {
+    this.style.borderColor = 'var(--accent)';
+  });
+  filterInput.addEventListener('blur', function() {
+    this.style.borderColor = 'var(--border)';
+  });
+})();
+
+document.querySelectorAll('.top-tabs .tab').forEach(t => {
+  t.addEventListener('click', () => setTab(t.dataset.tab));
+});
+
+$('btnPrev').addEventListener('click', () => stepFhour(-1));
+$('btnNext').addEventListener('click', () => stepFhour(1));
+$('btnPlay').addEventListener('click', () => togglePlay());
+$('speedSelect').addEventListener('change', updateAnimSpeed);
+
+// Mobile toggle
+$('mobileToggle').addEventListener('click', () => {
+  $('sidebar').classList.toggle('open');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// SSE
+// ═══════════════════════════════════════════════════════════════
+
+function connectSSE() {
+  const es = new EventSource('/events');
+  es.onopen = () => {
+    statusDot.className = 'status-dot connected';
+    statusText.textContent = 'connected';
+  };
+  es.onerror = () => {
+    statusDot.className = 'status-dot error';
+    statusText.textContent = 'disconnected';
+    setTimeout(connectSSE, 5000);
+    es.close();
+  };
+  // Listen for real model_run events from SSE (matches WxEvent::ModelRun)
+  es.addEventListener('model_run', e => {
+    try {
+      const d = JSON.parse(e.data);
+      if(d.model && d.date) {
+        state.modelRuns[d.model] = { date: d.date, hour: d.hour, init: d.date + ' ' + String(d.hour).padStart(2,'0') + 'z' };
+        toast(d.model.toUpperCase() + ' new run: ' + d.date + ' ' + String(d.hour).padStart(2,'0') + 'z', 'success');
+        if(d.model === state.model) {
+          updateInfoBar();
+          updateTileLayers();
+        }
+      }
+    } catch(ex) {}
+  });
+  // Also listen for legacy model_update events
+  es.addEventListener('model_update', e => {
+    try {
+      const d = JSON.parse(e.data);
+      if(d.model === state.model) {
+        toast(d.model.toUpperCase() + ' updated — ' + (d.run||''), 'success');
+        updateTileLayers();
+      }
+    } catch(ex) {}
+  });
+  es.addEventListener('radar', e => {
+    try {
+      const d = JSON.parse(e.data);
+      if(d.site) {
+        state.radarStatus[d.site.toUpperCase()] = { age_secs: 0 };
+        if(state.tab === 'radar') updateInfoBar();
+      }
+    } catch(ex) {}
+  });
+  es.addEventListener('status', e => {
+    try {
+      const d = JSON.parse(e.data);
+      if(d.message) toast(d.message, 'success');
+    } catch(ex) {}
+  });
+  es.onmessage = e => {
+    // generic message handling
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATUS FETCH — get real model run times and radar status
+// ═══════════════════════════════════════════════════════════════
+
+function fetchStatus() {
+  fetch('/api/status').then(r => r.json()).then(data => {
+    if(data.models) {
+      for(const [model, info] of Object.entries(data.models)) {
+        state.modelRuns[model] = { date: info.date, hour: info.hour, init: info.init };
+      }
+    }
+    if(data.radar) {
+      for(const [site, info] of Object.entries(data.radar)) {
+        state.radarStatus[site] = { age_secs: info.age_secs };
+      }
+    }
+    updateInfoBar();
+  }).catch(() => {
+    // Server may not have data yet — that's fine, we'll show estimated times
+  });
+}
+
+// Re-fetch status periodically to keep radar age current
+setInterval(fetchStatus, 30000);
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+
+function toast(msg, type) {
+  type = type || '';
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  $('toastContainer').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HEALTH CHECK
+// ═══════════════════════════════════════════════════════════════
+
+function checkHealth() {
+  fetch('/health').then(r => {
+    if(r.ok) {
+      statusDot.className = 'status-dot connected';
+      statusText.textContent = 'online';
+    } else throw new Error();
+  }).catch(() => {
+    statusDot.className = 'status-dot error';
+    statusText.textContent = 'offline';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+
+loadHash();
+buildFhourList();
+updateScrubber();
+updateInfoBar();
+updateColorbar();
+updateTileLayers();
+checkHealth();
+fetchStatus();
+connectSSE();
+
+// Invalidate map size after layout settles
+setTimeout(() => map.invalidateSize(), 100);
+
+window.addEventListener('hashchange', () => {
+  loadHash();
+  buildFhourList();
+  updateScrubber();
+  updateInfoBar();
+  updateColorbar();
+  updateTileLayers();
+});
+
+})();
+</script>
+</body>
+</html>

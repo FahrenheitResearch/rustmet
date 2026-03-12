@@ -2,9 +2,10 @@
 # An AI weather sentinel built on a pure-Rust weather platform.
 
 model:
-  provider: openrouter  # or nous, openai
-  model: nous/hermes-3-llama-3.1-70b  # or any OpenAI-compatible model
-  # api_key set via OPENROUTER_API_KEY env var
+  provider: openai  # vLLM exposes an OpenAI-compatible API
+  base_url: "http://localhost:5000/v1"
+  model: "nvidia/nemotron-3-super"
+  # api_key set via OPENAI_API_KEY env var (vLLM accepts any non-empty string)
 
 identity:
   name: Storm Guardian

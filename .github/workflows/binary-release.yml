@@ -1,0 +1,186 @@
+name: Binary Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARIES: "wx wx-pro wx-lite wx-mcp wx-server"
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+            cross: false
+
+          - platform: linux-aarch64
+            target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+            cross: true
+
+          - platform: macos-x86_64
+            target: x86_64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+            cross: false
+
+          - platform: macos-aarch64
+            target: aarch64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+            cross: false
+
+          - platform: windows-x64
+            target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+            cross: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (Linux aarch64)
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}
+
+      - name: Build binaries
+        shell: bash
+        run: |
+          build_cmd="cargo"
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            build_cmd="cross"
+          fi
+
+          for pkg in wx-agent wx-pro wx-lite wx-mcp wx-server; do
+            echo "::group::Building $pkg"
+            $build_cmd build --release --target ${{ matrix.target }} -p $pkg
+            echo "::endgroup::"
+          done
+
+      - name: Determine tag
+        id: tag
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Package artifacts (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.version }}"
+          ARCHIVE_NAME="rustmet-${TAG}-${{ matrix.platform }}"
+          mkdir -p "staging/${ARCHIVE_NAME}"
+
+          for bin in $BINARIES; do
+            cp "target/${{ matrix.target }}/release/${bin}" "staging/${ARCHIVE_NAME}/"
+          done
+
+          # Include web dashboard if it exists
+          if [ -f "examples/web-dashboard/index.html" ]; then
+            mkdir -p "staging/${ARCHIVE_NAME}/web-dashboard"
+            cp "examples/web-dashboard/index.html" "staging/${ARCHIVE_NAME}/web-dashboard/"
+          fi
+
+          cd staging
+          tar czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          echo "ASSET=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package artifacts (Windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          TAG="${{ steps.tag.outputs.version }}"
+          ARCHIVE_NAME="rustmet-${TAG}-${{ matrix.platform }}"
+          mkdir -p "staging/${ARCHIVE_NAME}"
+
+          for bin in $BINARIES; do
+            cp "target/${{ matrix.target }}/release/${bin}.exe" "staging/${ARCHIVE_NAME}/"
+          done
+
+          # Include web dashboard if it exists
+          if [ -f "examples/web-dashboard/index.html" ]; then
+            mkdir -p "staging/${ARCHIVE_NAME}/web-dashboard"
+            cp "examples/web-dashboard/index.html" "staging/${ARCHIVE_NAME}/web-dashboard/"
+          fi
+
+          cd staging
+          7z a "${ARCHIVE_NAME}.zip" "${ARCHIVE_NAME}"
+          echo "ASSET=${ARCHIVE_NAME}.zip" >> "$GITHUB_ENV"
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd staging
+          sha256sum "$ASSET" > "${ASSET}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            staging/${{ env.ASSET }}
+            staging/${{ env.ASSET }}.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} release/ \;
+
+      - name: Generate combined checksums
+        shell: bash
+        run: |
+          cd release
+          # Combine individual checksums and add any missing ones
+          cat *.sha256 > checksums-sha256.txt
+          # Verify all archives are covered
+          for f in *.tar.gz *.zip; do
+            [ -f "$f" ] || continue
+            if ! grep -q "$f" checksums-sha256.txt; then
+              sha256sum "$f" >> checksums-sha256.txt
+            fi
+          done
+          # Remove individual checksum files
+          rm -f *.tar.gz.sha256 *.zip.sha256
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

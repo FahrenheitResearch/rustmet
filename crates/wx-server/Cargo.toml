@@ -17,3 +17,11 @@ tracing-subscriber = "0.3"
 async-stream = "0.3"
 futures = "0.3"
 chrono = "0.4"
+
+# In-process GRIB2 download + tile rendering
+rustmet-core = { path = "../rustmet-core" }
+wx-field = { path = "../wx-field" }
+wx-radar = { path = "../wx-radar" }
+wx-sounding = { path = "../wx-sounding" }
+wx-obs = { path = "../wx-obs" }
+ureq = { version = "3", features = ["rustls"] }

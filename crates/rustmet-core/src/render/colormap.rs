@@ -119,37 +119,27 @@ pub static WIND: &[ColorStop] = &[
 ];
 
 // ============================================================
-// Reflectivity colormap: white -> blue -> green -> yellow -> red -> purple -> gray
-// Designed for 5-75 dBZ
+// Reflectivity colormap: PivotalWeather exact color table
+// Range: -5 to 75 dBZ (80 dBZ span)
 // ============================================================
 pub static REFLECTIVITY: &[ColorStop] = &[
-    (0.000, 0xff, 0xff, 0xff),
-    (0.038, 0xf2, 0xf6, 0xfc),
-    (0.077, 0xd9, 0xe3, 0xf4),
-    (0.115, 0xb0, 0xc6, 0xe6),
-    (0.154, 0x8a, 0xa7, 0xda),
-    (0.192, 0x64, 0x8b, 0xcb),
-    (0.231, 0x39, 0x6d, 0xc1), // blues
-    (0.269, 0x13, 0x50, 0xb4),
-    (0.308, 0x0d, 0x4f, 0x5d),
-    (0.346, 0x43, 0x73, 0x6f),
-    (0.385, 0x77, 0x98, 0x7b), // greens
-    (0.423, 0xa8, 0xbf, 0x8b),
-    (0.462, 0xfd, 0xf2, 0x73), // yellow
-    (0.500, 0xf2, 0xd4, 0x5a),
-    (0.538, 0xee, 0xb2, 0x47),
-    (0.577, 0xe1, 0x93, 0x2d), // orange
-    (0.615, 0xd9, 0x75, 0x17),
-    (0.654, 0xcd, 0x54, 0x03),
-    (0.692, 0xcd, 0x00, 0x02), // red
-    (0.731, 0xa1, 0x02, 0x06),
-    (0.769, 0x75, 0x03, 0x0b),
-    (0.808, 0x9e, 0x37, 0xab), // purple
-    (0.846, 0x83, 0x25, 0x9d),
-    (0.885, 0x60, 0x14, 0x90),
-    (0.923, 0x81, 0x81, 0x81), // gray (extreme)
-    (0.962, 0xb3, 0xb3, 0xb3),
-    (1.000, 0xe8, 0xe8, 0xe8),
+    (0.000, 0x00, 0x00, 0x00), // -5 dBZ: no echo (transparent)
+    (0.063, 0x00, 0x00, 0x00), // 0 dBZ: still transparent
+    (0.125, 0xD8, 0xE2, 0xF3), // 5 dBZ: pale blue-gray
+    (0.188, 0xD8, 0xE2, 0xF3), // 10 dBZ: (216,226,243)
+    (0.250, 0x87, 0xA9, 0xCA), // 15 dBZ: muted blue
+    (0.313, 0x3B, 0x6D, 0xC1), // 20 dBZ: (59,109,193)
+    (0.375, 0x0F, 0x50, 0x5F), // 25 dBZ: (15,80,95) dark teal
+    (0.438, 0x76, 0x9B, 0x7C), // 30 dBZ: (118,155,124) sage green
+    (0.500, 0xFF, 0xF3, 0x71), // 35 dBZ: (255,243,113) yellow
+    (0.563, 0xED, 0xB3, 0x44), // 40 dBZ: (237,179,68) gold
+    (0.625, 0xDB, 0x74, 0x17), // 45 dBZ: (219,116,23) orange
+    (0.688, 0xCC, 0x00, 0x00), // 50 dBZ: (204,0,0) red
+    (0.750, 0x76, 0x03, 0x0A), // 55 dBZ: (118,3,10) dark red
+    (0.781, 0xA0, 0x37, 0xAF), // 57.5 dBZ: (160,55,175) purple
+    (0.875, 0x82, 0x82, 0x82), // 65 dBZ: (130,130,130) gray
+    (0.938, 0xE6, 0xE6, 0xE6), // 70 dBZ: (230,230,230) light gray
+    (1.000, 0xFF, 0xFF, 0xFF), // 75 dBZ: white
 ];
 
 // ============================================================
@@ -433,6 +423,120 @@ pub static GOES_IR: &[ColorStop] = &[
     (1.000, 0x00, 0x00, 0x00), // black (coldest, ~170K)
 ];
 
+// ============================================================
+// NWS-style temperature colormap (classic NWS GFE colors)
+// Deep purple/blue < -20F through dark red/magenta > 100F
+// Designed for -40F to 120F
+// ============================================================
+pub static TEMPERATURE_NWS: &[ColorStop] = &[
+    (0.000, 0x4B, 0x00, 0x82), // deep purple (-40F)
+    (0.063, 0x3A, 0x00, 0x9E), // purple (-30F)
+    (0.125, 0x00, 0x00, 0xCC), // deep blue (-20F)
+    (0.188, 0x00, 0x44, 0xEE), // blue (-10F)
+    (0.250, 0x00, 0x88, 0xFF), // medium blue (0F)
+    (0.313, 0x00, 0xBB, 0xFF), // cyan-blue (10F)
+    (0.375, 0x00, 0xDD, 0xDD), // cyan (20F)
+    (0.438, 0x00, 0xCC, 0x66), // teal-green (30F)
+    (0.500, 0x00, 0xAA, 0x00), // green (40F)
+    (0.531, 0x66, 0xCC, 0x00), // yellow-green (45F)
+    (0.563, 0xCC, 0xDD, 0x00), // yellow (50F)
+    (0.625, 0xFF, 0xEE, 0x00), // bright yellow (60F)
+    (0.688, 0xFF, 0xBB, 0x00), // orange-yellow (70F)
+    (0.750, 0xFF, 0x88, 0x00), // orange (80F)
+    (0.813, 0xFF, 0x44, 0x00), // red-orange (90F)
+    (0.875, 0xEE, 0x00, 0x00), // red (100F)
+    (0.938, 0xCC, 0x00, 0x44), // dark red (110F)
+    (1.000, 0xAA, 0x00, 0x88), // magenta (120F)
+];
+
+// ============================================================
+// Pivotal Weather style temperature (muted, professional)
+// Cool blues through greens through warm oranges/reds
+// ============================================================
+pub static TEMPERATURE_PIVOTAL: &[ColorStop] = &[
+    (0.000, 0x1A, 0x23, 0x5B), // dark navy (-40F)
+    (0.083, 0x2B, 0x4B, 0x8A), // dark blue (-20F)
+    (0.167, 0x3D, 0x7E, 0xAE), // steel blue (0F)
+    (0.250, 0x5B, 0xA8, 0xC8), // muted cyan (10F)
+    (0.333, 0x8C, 0xCA, 0xBB), // sage (25F)
+    (0.400, 0x6D, 0xA8, 0x6D), // muted green (35F)
+    (0.450, 0xA3, 0xBF, 0x6F), // olive green (40F)
+    (0.500, 0xCC, 0xD3, 0x72), // khaki (50F)
+    (0.556, 0xE8, 0xD5, 0x6B), // warm yellow (55F)
+    (0.611, 0xE8, 0xB4, 0x5C), // muted gold (65F)
+    (0.667, 0xDD, 0x8E, 0x50), // muted orange (70F)
+    (0.722, 0xCC, 0x66, 0x44), // terra cotta (80F)
+    (0.778, 0xB8, 0x44, 0x3B), // muted red (85F)
+    (0.833, 0xA0, 0x2C, 0x3C), // dark red (95F)
+    (0.889, 0x82, 0x1C, 0x40), // maroon (105F)
+    (0.944, 0x6A, 0x14, 0x48), // dark maroon (110F)
+    (1.000, 0x52, 0x10, 0x4A), // deep purple-brown (120F)
+];
+
+// ============================================================
+// CAPE colormap (PivotalWeather style)
+// Gray/white -> yellow -> orange -> red -> magenta/purple
+// Designed for 0-5000+ J/kg
+// ============================================================
+pub static CAPE_PIVOTAL: &[ColorStop] = &[
+    (0.000, 0xF5, 0xF5, 0xF5), // near-white (0)
+    (0.050, 0xD0, 0xD0, 0xD0), // light gray (250)
+    (0.100, 0xAA, 0xAA, 0xAA), // gray (500)
+    (0.200, 0xF0, 0xE6, 0x8C), // light khaki (1000)
+    (0.300, 0xF0, 0xC8, 0x40), // gold (1500)
+    (0.400, 0xE8, 0x99, 0x20), // orange (2000)
+    (0.500, 0xE0, 0x60, 0x10), // red-orange (2500)
+    (0.600, 0xCC, 0x20, 0x10), // red (3000)
+    (0.700, 0xB0, 0x00, 0x30), // crimson (3500)
+    (0.800, 0xA0, 0x00, 0x70), // magenta (4000)
+    (0.900, 0x80, 0x00, 0x90), // purple (4500)
+    (1.000, 0x60, 0x00, 0xA0), // deep purple (5000+)
+];
+
+// ============================================================
+// Wind speed colormap (PivotalWeather style)
+// White/light -> green -> yellow -> orange -> red -> purple
+// Designed for 0-60 kt
+// ============================================================
+pub static WIND_PIVOTAL: &[ColorStop] = &[
+    (0.000, 0xF8, 0xF8, 0xF8), // near-white (calm)
+    (0.083, 0xD0, 0xE8, 0xD0), // very light green (5kt)
+    (0.167, 0x70, 0xC0, 0x70), // light green (10kt)
+    (0.250, 0x30, 0x99, 0x30), // green (15kt)
+    (0.333, 0x20, 0x77, 0x20), // dark green (20kt)
+    (0.417, 0xCC, 0xCC, 0x00), // yellow (25kt)
+    (0.500, 0xE8, 0xAA, 0x00), // gold (30kt)
+    (0.583, 0xF0, 0x80, 0x00), // orange (35kt)
+    (0.667, 0xE8, 0x44, 0x00), // red-orange (40kt)
+    (0.750, 0xDD, 0x00, 0x00), // red (45kt)
+    (0.833, 0xBB, 0x00, 0x44), // crimson (50kt)
+    (0.917, 0x99, 0x00, 0x88), // magenta (55kt)
+    (1.000, 0x77, 0x00, 0xAA), // purple (60kt+)
+];
+
+// ============================================================
+// Reflectivity (clean style for dark map backgrounds)
+// Adjusted NWS colors with better contrast on dark tiles
+// ============================================================
+pub static REFLECTIVITY_CLEAN: &[ColorStop] = &[
+    (0.000, 0x00, 0x00, 0x00), // transparent/black (<5 dBZ)
+    (0.067, 0x00, 0x00, 0x00), // 5 dBZ boundary
+    (0.070, 0x00, 0x70, 0x70), // dark teal (5 dBZ)
+    (0.143, 0x00, 0x99, 0x44), // dark green (15 dBZ)
+    (0.214, 0x00, 0xBB, 0x00), // green (20 dBZ)
+    (0.286, 0x44, 0xDD, 0x00), // bright green (25 dBZ)
+    (0.357, 0xDD, 0xDD, 0x00), // yellow (30 dBZ)
+    (0.429, 0xDD, 0xAA, 0x00), // dark yellow (35 dBZ)
+    (0.500, 0xEE, 0x77, 0x00), // orange (40 dBZ)
+    (0.571, 0xEE, 0x22, 0x00), // red (45 dBZ)
+    (0.643, 0xBB, 0x00, 0x00), // dark red (50 dBZ)
+    (0.714, 0x99, 0x00, 0x00), // darker red (55 dBZ)
+    (0.786, 0xEE, 0x00, 0xDD), // bright magenta (60 dBZ)
+    (0.857, 0x88, 0x44, 0xBB), // purple (65 dBZ)
+    (0.929, 0xEE, 0xEE, 0xEE), // bright white (70+ dBZ)
+    (1.000, 0xCC, 0xCC, 0xCC), // light gray (75+ dBZ)
+];
+
 /// Look up a named colormap. Returns None if the name is not recognized.
 pub fn get_colormap(name: &str) -> Option<&'static [ColorStop]> {
     match name {
@@ -458,6 +562,11 @@ pub fn get_colormap(name: &str) -> Option<&'static [ColorStop]> {
         "nws_reflectivity" | "nws_radar" | "nexrad" => Some(NWS_REFLECTIVITY),
         "nws_precip" | "nws_qpe" | "qpe" => Some(NWS_PRECIP),
         "goes_ir" | "satellite_ir" | "ir" => Some(GOES_IR),
+        "temperature_nws" | "temp_nws" => Some(TEMPERATURE_NWS),
+        "temperature_pivotal" | "temp_pivotal" => Some(TEMPERATURE_PIVOTAL),
+        "cape_pivotal" => Some(CAPE_PIVOTAL),
+        "wind_pivotal" | "winds_pivotal" => Some(WIND_PIVOTAL),
+        "reflectivity_clean" | "refl_clean" => Some(REFLECTIVITY_CLEAN),
         _ => None,
     }
 }
@@ -484,6 +593,11 @@ pub fn list_colormaps() -> &'static [&'static str] {
         "nws_reflectivity",
         "nws_precip",
         "goes_ir",
+        "temperature_nws",
+        "temperature_pivotal",
+        "cape_pivotal",
+        "wind_pivotal",
+        "reflectivity_clean",
     ]
 }
 
@@ -523,5 +637,46 @@ mod tests {
         assert!(get_colormap("temperature").is_some());
         assert!(get_colormap("wind").is_some());
         assert!(get_colormap("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_styled_colormaps_exist() {
+        // All styled colormaps should be resolvable
+        assert!(get_colormap("temperature_nws").is_some());
+        assert!(get_colormap("temperature_pivotal").is_some());
+        assert!(get_colormap("cape_pivotal").is_some());
+        assert!(get_colormap("wind_pivotal").is_some());
+        assert!(get_colormap("reflectivity_clean").is_some());
+        assert!(get_colormap("temp_nws").is_some());
+        assert!(get_colormap("temp_pivotal").is_some());
+        assert!(get_colormap("refl_clean").is_some());
+    }
+
+    #[test]
+    fn test_styled_colormaps_interpolate() {
+        // Each styled colormap should produce valid colors at endpoints and midpoint
+        let styled = [
+            TEMPERATURE_NWS, TEMPERATURE_PIVOTAL, CAPE_PIVOTAL,
+            WIND_PIVOTAL, REFLECTIVITY_CLEAN,
+        ];
+        for cmap in &styled {
+            let (r0, g0, b0) = interpolate_color(cmap, 0.0);
+            let (r5, g5, b5) = interpolate_color(cmap, 0.5);
+            let (r1, g1, b1) = interpolate_color(cmap, 1.0);
+            // Just verify they don't panic and produce different colors at extremes
+            assert!(r0 != r1 || g0 != g1 || b0 != b1, "Endpoints should differ");
+        }
+    }
+
+    #[test]
+    fn test_all_listed_colormaps_resolve() {
+        // Every name in list_colormaps() should resolve via get_colormap()
+        for name in list_colormaps() {
+            assert!(
+                get_colormap(name).is_some(),
+                "Listed colormap '{}' should resolve via get_colormap()",
+                name,
+            );
+        }
     }
 }

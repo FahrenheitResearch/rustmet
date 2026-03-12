@@ -14,7 +14,7 @@ const MAX_LOOKBACK_HOURS: i64 = 48;
 /// Find the most recent available run for a given model.
 ///
 /// Returns `(date_str, hour)` where `date_str` is `"YYYYMMDD"` and `hour` is
-/// the initialization hour (0-23). Probes for the f00 .idx file on AWS.
+/// the initialization hour (0-23). Probes for the f00 .idx file on NOMADS.
 ///
 /// # Errors
 ///
@@ -52,7 +52,7 @@ pub fn find_latest_run(client: &DownloadClient, model: &str) -> Result<(String, 
 
         let date_str = candidate.format("%Y%m%d").to_string();
 
-        // Probe NOMADS first — it's the authoritative source and gets new runs first
+        // Probe NOMADS — it's the authoritative source and gets new runs first
         let idx_url = match model_lower.as_str() {
             "hrrr" => format!("{}.idx", HrrrConfig::nomads_url(&date_str, hour, "sfc", 0)),
             "gfs" => format!("{}.idx", GfsConfig::nomads_url(&date_str, hour, 0)),

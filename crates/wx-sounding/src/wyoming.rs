@@ -17,17 +17,17 @@ pub fn fetch_sounding(
     day: u32,
     hour: u32,
 ) -> Result<Sounding, String> {
-    // Resolve station to WMO number for the URL
-    let wmo = if let Some(s) = find_raob_station(station) {
-        s.wmo.to_string()
+    // Resolve station: prefer ICAO code (Wyoming now requires ICAO over WMO)
+    let station_id = if let Some(s) = find_raob_station(station) {
+        s.icao.to_string()
     } else {
-        // Assume it's already a WMO number or station ID the server understands
-        station.to_string()
+        // Assume it's already a valid ID the server understands
+        station.to_uppercase()
     };
 
     let url = format!(
         "https://weather.uwyo.edu/wsgi/sounding?datetime={}-{:02}-{:02}+{:02}%3A00%3A00&id={}&src=UNKNOWN&type=TEXT%3ALIST",
-        year, month, day, hour, wmo
+        year, month, day, hour, station_id
     );
 
     let body = http_get(&url)?;
