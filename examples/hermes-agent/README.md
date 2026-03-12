@@ -1,6 +1,6 @@
 # Storm Guardian — AI Weather Agent Example
 
-Deploy an autonomous AI weather agent using [Hermes Agent](https://github.com/NousResearch/hermes-agent) and rustmet's `wx-mcp` tool server. The agent monitors weather conditions on a cron schedule, answers natural-language questions about outdoor activities, and escalates severe weather alerts via Telegram.
+Deploy an autonomous AI weather agent using [Hermes Agent](https://github.com/NousResearch/hermes-agent) and rustmet's `wx-mcp` tool server. The agent monitors weather conditions on a schedule, answers natural-language questions about outdoor activities, and escalates severe weather alerts via Telegram.
 
 ## Architecture
 
@@ -48,44 +48,97 @@ The default config uses Nemotron-3-Super-120B via vLLM:
 
 | Setup | GPU | VRAM | Notes |
 |-------|-----|------|-------|
-| Single GPU | 1x H200 | 141 GB | FP8 quantization, fits in one card |
+| Single GPU | 1x H200 | 141 GB | NVFP4 quantization, fits in one card |
 | Multi-GPU | 2x H100-80GB | 160 GB | Tensor parallel across two cards |
 | Budget | 2x A100-80GB | 160 GB | Slower but works with FP8 |
 
-Smaller models (70B, 8B) work on consumer hardware but reduce agent quality. Any OpenAI-compatible endpoint works — adjust `base_url` and `model` in the config.
+Smaller models (70B, 8B) work on consumer hardware but reduce agent quality. Any OpenAI-compatible endpoint works — use OpenRouter if you don't have a GPU.
 
 ## Quick Start
 
-### 1. Set environment variables
+### 1. Install Hermes Agent
 
 ```bash
-# For vLLM, any non-empty string works as the key
-export OPENAI_API_KEY="not-needed"
-
-# Telegram push notifications
-export TELEGRAM_BOT_TOKEN="your-bot-token"
-export TELEGRAM_CHAT_ID="your-chat-id"
+git clone --recurse-submodules https://github.com/NousResearch/hermes-agent.git
+cd hermes-agent
+uv venv venv --python 3.11
+uv pip install -e ".[all]"
 ```
 
-### 2. Copy and edit config files
+### 2. Copy config files
 
 ```bash
-# Copy example configs to Hermes config directory
+# Main config
 cp examples/hermes-agent/config/hermes_config.yaml ~/.hermes/config.yaml
-cp examples/hermes-agent/config/SOUL.md ~/.hermes/SOUL.md
-cp examples/hermes-agent/config/USER.md ~/.hermes/USER.md
 
-# Edit USER.md with your location, preferences, and activities
-$EDITOR ~/.hermes/USER.md
+# Agent personality
+cp examples/hermes-agent/config/SOUL.md ~/.hermes/SOUL.md
+
+# User profile (goes in memories/)
+mkdir -p ~/.hermes/memories
+cp examples/hermes-agent/config/USER.md ~/.hermes/memories/USER.md
+
+# Environment variables
+cp examples/hermes-agent/config/dot-env.example ~/.hermes/.env
 ```
+
+Edit `~/.hermes/memories/USER.md` with your location, preferences, and activities.
+Edit `~/.hermes/.env` with your API keys and Telegram credentials.
 
 ### 3. Install skills
 
 ```bash
-cp examples/hermes-agent/skills/*.md ~/.hermes/skills/
+cp -r examples/hermes-agent/skills/weather ~/.hermes/skills/weather
 ```
 
-### 4. (Optional) Start the tile server
+### 4. Set up Telegram gateway
+
+```bash
+hermes gateway setup    # Interactive wizard
+hermes gateway install  # Install as systemd/launchd service
+```
+
+### 5. Start vLLM (if self-hosting)
+
+```bash
+vllm serve nvidia/Llama-3.1-Nemotron-3-Super-120B-v1 \
+  --port 8000 \
+  --max-model-len 8192 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes
+```
+
+### 6. Set up cron jobs
+
+Cron jobs are managed via CLI, not config files:
+
+```bash
+# Morning briefing at 6 AM
+hermes cron add --name morning_briefing \
+  --schedule "0 6 * * *" \
+  --deliver telegram \
+  --prompt "Generate a morning weather briefing for the user."
+
+# Severe weather check every 30 minutes
+hermes cron add --name severe_check \
+  --schedule "every 30m" \
+  --deliver telegram \
+  --prompt "Check for severe weather alerts at the user's location. Only notify if there are active warnings or watches."
+
+# Evening summary at 8 PM
+hermes cron add --name evening_summary \
+  --schedule "0 20 * * *" \
+  --deliver telegram \
+  --prompt "Give a brief overnight weather summary and tomorrow's outlook."
+
+# Fire weather check at noon
+hermes cron add --name fire_weather_check \
+  --schedule "0 12 * * *" \
+  --deliver telegram \
+  --prompt "Check fire weather conditions. Alert if RH is below 20% or Red Flag Warnings are active."
+```
+
+### 7. (Optional) Start the tile server
 
 ```bash
 wx-server --port 8080 --cache-size 512
@@ -93,16 +146,16 @@ wx-server --port 8080 --cache-size 512
 
 Enables the live map dashboard and XYZ tile streaming for visual weather overlays.
 
-### 5. Start the agent
+### 8. Start the agent
 
 ```bash
-hermes-agent --config ~/.hermes/config.yaml
+hermes
 ```
 
 The agent will:
 - Connect to `wx-mcp` via MCP (stdio)
-- Load your user profile from USER.md
-- Begin cron-scheduled weather checks (briefings, severe weather, fire weather)
+- Load your user profile from `~/.hermes/memories/USER.md`
+- Run cron-scheduled weather checks
 - Listen for Telegram messages
 
 ## MCP Tool Reference
@@ -151,40 +204,18 @@ The agent will:
 
 ## Skills
 
-Skills are markdown files that teach the agent how to handle specific weather scenarios. The agent can also write new skills when it encounters novel problems (`auto_evolve: true`).
+Skills teach the agent how to handle specific weather scenarios. They live in `~/.hermes/skills/weather/` using the standard Hermes skill format (SKILL.md with YAML frontmatter).
 
 ### Included Skills
 
-| Skill | File | Purpose |
-|-------|------|---------|
-| Morning Briefing | `morning_briefing.md` | Daily 6 AM weather summary with activity advice |
-| Severe Weather Alert | `severe_weather_alert.md` | 4-tier escalation: GREEN/YELLOW/ORANGE/RED |
-| Activity Check | `activity_check.md` | "Can I mow/spray/burn/fish today?" with thresholds |
-| Fire Weather | `fire_weather.md` | Fire risk assessment: LOW through EXTREME |
+| Skill | Directory | Purpose |
+|-------|-----------|---------|
+| Morning Briefing | `weather/morning-briefing/` | Daily 6 AM weather summary with activity advice |
+| Severe Weather Alert | `weather/severe-weather-alert/` | 4-tier escalation: GREEN/YELLOW/ORANGE/RED |
+| Activity Check | `weather/activity-check/` | "Can I mow/spray/burn/fish today?" with thresholds |
+| Fire Weather | `weather/fire-weather/` | Fire risk assessment: LOW through EXTREME |
 
-### Adding Custom Skills
-
-Create a markdown file in `~/.hermes/skills/` with this structure:
-
-```markdown
-# Skill Name
-
-## When to Use
-Describe the triggers — user questions, cron events, or alert conditions.
-
-## Steps
-1. Which wx tools to call and in what order
-2. How to interpret the results
-3. How to format the response
-
-## Thresholds
-Define numeric thresholds for decisions (wind speed, temperature, etc.)
-
-## Example Output
-Show what a good response looks like.
-```
-
-The agent loads all `.md` files from the skills directory at startup. New skills take effect on the next agent restart, or immediately if the agent writes them via `auto_evolve`.
+The agent can also write new skills when it encounters novel problems (`auto_evolve` in Hermes config).
 
 ## Cron Schedule
 
@@ -195,7 +226,7 @@ The agent loads all `.md` files from the skills directory at startup. New skills
 | `evening_summary` | 8:00 PM daily | Overnight outlook + tomorrow preview |
 | `fire_weather_check` | 12:00 PM daily | Peak fire weather assessment |
 
-Edit schedules in `hermes_config.yaml`. All times are in the system's local timezone.
+Manage with `hermes cron list`, `hermes cron add`, `hermes cron remove`. All times are in the system's local timezone.
 
 ## File Structure
 
@@ -203,12 +234,39 @@ Edit schedules in `hermes_config.yaml`. All times are in the system's local time
 examples/hermes-agent/
 ├── README.md
 ├── config/
-│   ├── hermes_config.yaml   # Agent config (model, cron, MCP, gateway)
-│   ├── SOUL.md              # Agent identity and behavioral principles
-│   └── USER.md              # Template user profile (edit with your info)
+│   ├── hermes_config.yaml     # → ~/.hermes/config.yaml
+│   ├── dot-env.example        # → ~/.hermes/.env
+│   ├── SOUL.md                # → ~/.hermes/SOUL.md
+│   └── USER.md                # → ~/.hermes/memories/USER.md
 └── skills/
-    ├── morning_briefing.md      # Daily weather briefing
-    ├── severe_weather_alert.md  # Alert escalation tiers
-    ├── activity_check.md        # Outdoor activity advisor
-    └── fire_weather.md          # Fire weather assessment
+    └── weather/               # → ~/.hermes/skills/weather/
+        ├── morning-briefing/
+        │   └── SKILL.md
+        ├── severe-weather-alert/
+        │   └── SKILL.md
+        ├── activity-check/
+        │   └── SKILL.md
+        └── fire-weather/
+            └── SKILL.md
+```
+
+## Deployment on Vast.ai (H200)
+
+1. Rent a single H200 instance (141 GB VRAM)
+2. Install vLLM: `pip install vllm`
+3. Start the model:
+   ```bash
+   vllm serve nvidia/Llama-3.1-Nemotron-3-Super-120B-v1 \
+     --port 8000 \
+     --max-model-len 8192 \
+     --enable-auto-tool-choice \
+     --tool-call-parser hermes
+   ```
+4. On your local machine (or the same instance), set `OPENAI_BASE_URL` to point at the vLLM endpoint
+5. Place `wx-mcp` and `wx-pro` binaries in your PATH
+6. Start Hermes Agent: `hermes`
+
+If running Hermes locally and vLLM remotely, update `~/.hermes/.env`:
+```bash
+OPENAI_BASE_URL=http://<vast-ai-ip>:8000/v1
 ```

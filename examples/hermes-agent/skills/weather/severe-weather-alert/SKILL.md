@@ -1,3 +1,14 @@
+---
+name: severe-weather-alert
+description: Escalate severe weather alerts with 4-tier system (GREEN/YELLOW/ORANGE/RED)
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [weather, alerts, severe, safety]
+    category: weather
+    requires_tools: [wx_alerts]
+---
+
 # Severe Weather Alert Escalation
 
 ## When to Use
@@ -16,19 +27,13 @@ A Watch means conditions are favorable for severe weather. Send an extra update 
 **Template:**
 "A [WATCH TYPE] has been issued for your area until [TIME]. [SPECIFIC THREAT]. Keep your phone charged and know where your shelter is."
 
-**Example:**
-"A Tornado Watch has been issued for your area until 9 PM. Conditions support large hail and a few tornadoes. Keep your phone charged and know where your shelter is."
-
 ### ORANGE — Warning Issued
 A Warning means severe weather is occurring or imminent. Send an immediate push notification.
 
 **Triggers:** Severe Thunderstorm Warning, Flash Flood Warning, Winter Storm Warning, Blizzard Warning, Ice Storm Warning
 
 **Template:**
-"⚠️ [WARNING TYPE] for your county until [TIME]. [SPECIFIC HAZARD AND MAGNITUDE]. [ACTION ITEM]."
-
-**Example:**
-"⚠️ SEVERE THUNDERSTORM WARNING for Cleveland County until 8:45 PM. Damaging wind gusts up to 70 mph and quarter-size hail expected. Move indoors now and stay away from windows."
+"WARNING: [WARNING TYPE] for your county until [TIME]. [SPECIFIC HAZARD AND MAGNITUDE]. [ACTION ITEM]."
 
 ### RED — Tornado Warning / PDS
 Maximum urgency. Life-threatening situation. Override Do Not Disturb.
@@ -36,12 +41,7 @@ Maximum urgency. Life-threatening situation. Override Do Not Disturb.
 **Triggers:** Tornado Warning, PDS Tornado Watch, PDS Severe Thunderstorm Warning, Tornado Emergency
 
 **Template:**
-"🚨 TORNADO WARNING — Take shelter NOW in your interior room on the lowest floor. [SPECIFIC INFO]. Do not wait."
-
-**Examples:**
-"🚨 TORNADO WARNING — Take shelter NOW in your interior room on the lowest floor. Radar shows strong rotation 15 miles west of Norman, moving northeast at 40 mph. This storm has a history of producing tornadoes. Do not wait."
-
-"🚨 TORNADO EMERGENCY for Moore and south Oklahoma City. A large, extremely dangerous tornado is on the ground. Take shelter immediately in the most interior room on the lowest floor. Cover your head. This is a life-threatening situation."
+"TORNADO WARNING — Take shelter NOW in your interior room on the lowest floor. [SPECIFIC INFO]. Do not wait."
 
 ## Steps
 1. Call `wx_alerts` with user's lat/lon from USER.md

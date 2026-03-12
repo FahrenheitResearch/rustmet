@@ -1,3 +1,14 @@
+---
+name: morning-briefing
+description: Generate a daily morning weather briefing with activity advice
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [weather, briefing, daily]
+    category: weather
+    requires_tools: [wx_brief]
+---
+
 # Morning Weather Briefing
 
 ## When to Use

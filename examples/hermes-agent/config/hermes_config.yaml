@@ -1,59 +1,39 @@
 # Storm Guardian — Hermes Agent Configuration
-# An AI weather sentinel built on a pure-Rust weather platform.
+# Copy to ~/.hermes/config.yaml
 
 model:
-  provider: openai  # vLLM exposes an OpenAI-compatible API
-  base_url: "http://localhost:5000/v1"
-  model: "nvidia/nemotron-3-super"
-  # api_key set via OPENAI_API_KEY env var (vLLM accepts any non-empty string)
-
-identity:
-  name: Storm Guardian
-  description: >
-    I am Storm Guardian, an AI weather sentinel built on a 50K+ LOC pure-Rust
-    weather platform. I have 20 MCP tools that access NEXRAD radar, GRIB2 model
-    data, NWS products, XYZ tile generation, METAR stations, and global weather.
-    I can generate live map views, stream real-time events, and deliver
-    plain-English weather intelligence. I learn what you care about and keep you safe.
-  soul: ./SOUL.md
+  # For self-hosted vLLM on H200:
+  #   Set OPENAI_BASE_URL=http://localhost:8000/v1 in ~/.hermes/.env
+  #   Set LLM_MODEL=nvidia/Llama-3.1-Nemotron-3-Super-120B-v1 in ~/.hermes/.env
+  #   Set OPENAI_API_KEY=dummy in ~/.hermes/.env
+  #
+  # For OpenRouter (no GPU required):
+  #   Set OPENROUTER_API_KEY=sk-or-... in ~/.hermes/.env
+  #   provider: openrouter
+  #   default: nousresearch/hermes-3-llama-3.1-70b
+  provider: openai
+  default: nvidia/Llama-3.1-Nemotron-3-Super-120B-v1
 
 memory:
-  enabled: true
-  user_modeling: true
-  user_profile: ./USER.md
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 2200
+  user_char_limit: 1375
 
-skills:
-  directory: ../skills/
-  auto_evolve: true  # Agent can write new skills when it solves novel problems
+agent:
+  max_turns: 90
 
-cron:
-  - name: morning_briefing
-    schedule: "0 6 * * *"  # 6 AM daily
-    prompt: "Generate a morning weather briefing for the user."
-
-  - name: severe_check
-    schedule: "*/30 * * * *"  # Every 30 minutes
-    prompt: "Check for severe weather alerts at the user's location. Only notify if there are active warnings or watches."
-
-  - name: evening_summary
-    schedule: "0 20 * * *"  # 8 PM daily
-    prompt: "Give a brief overnight weather summary and tomorrow's outlook."
-
-  - name: fire_weather_check
-    schedule: "0 12 * * *"  # Noon daily (peak fire weather time)
-    prompt: "Check fire weather conditions. Alert if RH is below 20% or Red Flag Warnings are active."
-
-gateway:
-  telegram:
-    enabled: true
-    # token set via TELEGRAM_BOT_TOKEN env var
-    # chat_id set via TELEGRAM_CHAT_ID env var
-    parse_mode: markdown
+display:
+  tool_progress: all
+  compact: false
+  bell_on_complete: true
 
 mcp_servers:
   wx-tools:
     command: "wx-mcp"
     args: []
+    timeout: 120
+    connect_timeout: 60
     # 20 MCP tools available, organized by data cost:
     #
     # --- Lightweight (< 50KB) ---

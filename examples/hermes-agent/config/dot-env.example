@@ -1,0 +1,16 @@
+# Storm Guardian — Environment Variables
+# Copy to ~/.hermes/.env and fill in your values.
+
+# --- LLM Backend ---
+# Option A: Self-hosted vLLM on H200
+OPENAI_BASE_URL=http://localhost:8000/v1
+OPENAI_API_KEY=dummy
+LLM_MODEL=nvidia/Llama-3.1-Nemotron-3-Super-120B-v1
+
+# Option B: OpenRouter (comment out Option A, uncomment this)
+# OPENROUTER_API_KEY=sk-or-your-key-here
+
+# --- Telegram Gateway ---
+TELEGRAM_BOT_TOKEN=your-bot-token-from-botfather
+TELEGRAM_HOME_CHANNEL=your-chat-id
+TELEGRAM_ALLOWED_USERS=your-telegram-user-id
