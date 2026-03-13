@@ -539,6 +539,7 @@ mod tests {
                 elevation: 0.5,
                 azimuth_spacing: 1.0,
                 nyquist_velocity: None,
+                radial_status: 1,
                 moments: vec![MomentData {
                     product: RadarProduct::Reflectivity,
                     gate_count: 500,
@@ -553,6 +554,10 @@ mod tests {
             elevation_number: 1,
             elevation_angle: 0.5,
             nyquist_velocity: None,
+            sweep_index: 0,
+            start_status: 3,
+            end_status: 2,
+            cut_sector: 0,
             radials,
         }
     }

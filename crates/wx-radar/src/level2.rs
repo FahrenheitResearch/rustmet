@@ -25,6 +25,14 @@ pub struct Level2Sweep {
     pub elevation_number: u8,
     pub elevation_angle: f32,
     pub nyquist_velocity: Option<f32>,
+    /// Sequential sweep index within the volume (0-based).
+    pub sweep_index: u16,
+    /// Radial status of the first radial (0=start elev, 3=start volume, 5=start elev mid-vol).
+    pub start_status: u8,
+    /// Radial status of the last radial (2=end elev, 4=end volume; other values indicate incomplete cut).
+    pub end_status: u8,
+    /// Cut sector number from the VCP (0 = full 360°).
+    pub cut_sector: u8,
     pub radials: Vec<RadialData>,
 }
 
@@ -34,6 +42,9 @@ pub struct RadialData {
     pub elevation: f32,
     pub azimuth_spacing: f32,
     pub nyquist_velocity: Option<f32>,
+    /// Radial status: 0=start elev, 1=intermediate, 2=end elev, 3=start volume,
+    /// 4=end volume, 5=start elev (found mid-volume in some SAILS data).
+    pub radial_status: u8,
     pub moments: Vec<MomentData>,
 }
 
@@ -62,6 +73,8 @@ struct Message31Header {
     elevation_angle: f32,
     elevation_number: u8,
     azimuth_resolution: u8,
+    radial_status: u8,
+    cut_sector: u8,
     data_block_count: u16,
 }
 
@@ -78,33 +91,29 @@ impl Level2File {
         let mut cursor = Cursor::new(&data);
         let header = Self::read_volume_header(&mut cursor)?;
 
-        let mut sweeps_map: std::collections::BTreeMap<u8, Level2Sweep> =
-            std::collections::BTreeMap::new();
+        // Collect all radials, then split into sweeps by cut boundaries.
+        // Uses radial_status (0=start elev, 3=start volume, 5=start elev mid-vol)
+        // and elevation_number changes as fallback to properly separate
+        // SAILS/MESO-SAILS duplicate elevations into distinct sweeps.
+        let mut all_radials: Vec<(u8, u8, RadialData)> = Vec::new();
 
         while (cursor.position() as usize) < data.len().saturating_sub(MSG_HEADER_SIZE) {
             match Self::read_message(&mut cursor, &data) {
-                Ok(Some((elev_num, radial))) => {
-                    let sweep = sweeps_map.entry(elev_num).or_insert_with(|| Level2Sweep {
-                        elevation_number: elev_num,
-                        elevation_angle: radial.elevation,
-                        nyquist_velocity: radial.nyquist_velocity,
-                        radials: Vec::new(),
-                    });
-                    if sweep.nyquist_velocity.is_none() && radial.nyquist_velocity.is_some() {
-                        sweep.nyquist_velocity = radial.nyquist_velocity;
-                    }
-                    sweep.radials.push(radial);
+                Ok(Some((elev_num, cut_sector, radial))) => {
+                    all_radials.push((elev_num, cut_sector, radial));
                 }
                 Ok(None) => continue,
                 Err(_) => break,
             }
         }
 
+        let sweeps = Self::split_radials_into_sweeps(all_radials);
+
         Ok(Level2File {
             station_id: header.station_id,
             volume_date: header.volume_date,
             volume_time: header.volume_time,
-            sweeps: sweeps_map.into_values().collect(),
+            sweeps,
         })
     }
 
@@ -200,7 +209,8 @@ impl Level2File {
         Ok(VolumeHeader { station_id, volume_date, volume_time })
     }
 
-    fn read_message(cursor: &mut Cursor<&Vec<u8>>, data: &[u8]) -> Result<Option<(u8, RadialData)>, String> {
+    /// Returns (elevation_number, cut_sector, radial).
+    fn read_message(cursor: &mut Cursor<&Vec<u8>>, data: &[u8]) -> Result<Option<(u8, u8, RadialData)>, String> {
         let start_pos = cursor.position() as usize;
         if start_pos + 12 > data.len() { return Err("End of data".into()); }
 
@@ -242,7 +252,10 @@ impl Level2File {
             let block_type = data[block_pos];
             if block_type == b'D' {
                 if let Ok(moment) = Self::parse_moment_block(data, block_pos) {
-                    moments.push(moment);
+                    // Skip unknown/unrecognized moment types
+                    if moment.product != RadarProduct::Unknown {
+                        moments.push(moment);
+                    }
                 }
             } else if block_type == b'R' {
                 nyquist_velocity = Self::parse_radial_block_nyquist(data, block_pos);
@@ -260,10 +273,11 @@ impl Level2File {
             elevation: msg31.elevation_angle,
             azimuth_spacing: if msg31.azimuth_resolution == 1 { 0.5 } else { 1.0 },
             nyquist_velocity,
+            radial_status: msg31.radial_status,
             moments,
         };
 
-        Ok(Some((msg31.elevation_number, radial)))
+        Ok(Some((msg31.elevation_number, msg31.cut_sector, radial)))
     }
 
     fn read_message_header(cursor: &mut Cursor<&Vec<u8>>) -> Result<MessageHeader, String> {
@@ -287,9 +301,9 @@ impl Level2File {
         let _spare = cursor.read_u8().map_err(|e| e.to_string())?;
         let _radial_length = cursor.read_u16::<BigEndian>().map_err(|e| e.to_string())?;
         let azimuth_resolution = cursor.read_u8().map_err(|e| e.to_string())?;
-        let _radial_status = cursor.read_u8().map_err(|e| e.to_string())?;
+        let radial_status = cursor.read_u8().map_err(|e| e.to_string())?;
         let elevation_number = cursor.read_u8().map_err(|e| e.to_string())?;
-        let _cut_sector = cursor.read_u8().map_err(|e| e.to_string())?;
+        let cut_sector = cursor.read_u8().map_err(|e| e.to_string())?;
         let elevation_angle = cursor.read_f32::<BigEndian>().map_err(|e| e.to_string())?;
         let _spot_blanking = cursor.read_u8().map_err(|e| e.to_string())?;
         let _az_index_mode = cursor.read_u8().map_err(|e| e.to_string())?;
@@ -297,7 +311,7 @@ impl Level2File {
 
         Ok(Message31Header {
             azimuth_angle, elevation_angle, elevation_number,
-            azimuth_resolution, data_block_count,
+            azimuth_resolution, radial_status, cut_sector, data_block_count,
         })
     }
 
@@ -346,5 +360,207 @@ impl Level2File {
         }
 
         Ok(MomentData { product, gate_count, first_gate_range, gate_size, data: decoded })
+    }
+
+    /// Split raw radials into sweeps using radial_status and elevation_number.
+    /// Exposed for testing.
+    #[doc(hidden)]
+    pub fn split_radials_into_sweeps(radials: Vec<(u8, u8, RadialData)>) -> Vec<Level2Sweep> {
+        let mut sweeps: Vec<Level2Sweep> = Vec::new();
+        let mut current_radials: Vec<RadialData> = Vec::new();
+        let mut current_elev_num: u8 = 0;
+        let mut current_cut_sector: u8 = 0;
+        let mut sweep_counter: u16 = 0;
+
+        fn flush(
+            sweeps: &mut Vec<Level2Sweep>,
+            radials: &mut Vec<RadialData>,
+            elev_num: u8,
+            cut_sector: u8,
+            sweep_index: &mut u16,
+        ) {
+            if radials.is_empty() { return; }
+            let elev_angle = radials[0].elevation;
+            let nyquist = radials.iter().find_map(|r| r.nyquist_velocity);
+            let start_status = radials[0].radial_status;
+            let end_status = radials.last().map(|r| r.radial_status).unwrap_or(0xFF);
+            sweeps.push(Level2Sweep {
+                elevation_number: elev_num,
+                elevation_angle: elev_angle,
+                nyquist_velocity: nyquist,
+                sweep_index: *sweep_index,
+                start_status,
+                end_status,
+                cut_sector,
+                radials: std::mem::take(radials),
+            });
+            *sweep_index += 1;
+        }
+
+        for (elev_num, cut_sector, radial) in radials {
+            let is_status_start = matches!(radial.radial_status, 0 | 3 | 5);
+            let is_elev_change = !current_radials.is_empty() && elev_num != current_elev_num;
+            let should_split = is_status_start || is_elev_change;
+
+            if should_split && !current_radials.is_empty() {
+                flush(
+                    &mut sweeps, &mut current_radials,
+                    current_elev_num, current_cut_sector, &mut sweep_counter,
+                );
+            }
+
+            current_elev_num = elev_num;
+            current_cut_sector = cut_sector;
+            current_radials.push(radial);
+        }
+
+        flush(
+            &mut sweeps, &mut current_radials,
+            current_elev_num, current_cut_sector, &mut sweep_counter,
+        );
+
+        sweeps
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_radial(azimuth: f32, elevation: f32, status: u8) -> RadialData {
+        RadialData {
+            azimuth,
+            elevation,
+            azimuth_spacing: 1.0,
+            nyquist_velocity: None,
+            radial_status: status,
+            moments: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_normal_cuts_split_correctly() {
+        // Normal VCP: 3 tilts at 0.5°, 0.9°, 1.3°
+        let radials = vec![
+            // Tilt 1: elev_num=1, 0.5°
+            (1, 0, make_radial(0.0, 0.5, 3)),   // start volume
+            (1, 0, make_radial(1.0, 0.5, 1)),
+            (1, 0, make_radial(2.0, 0.5, 2)),   // end elev
+            // Tilt 2: elev_num=2, 0.9°
+            (2, 0, make_radial(0.0, 0.9, 0)),   // start elev
+            (2, 0, make_radial(1.0, 0.9, 1)),
+            (2, 0, make_radial(2.0, 0.9, 2)),   // end elev
+            // Tilt 3: elev_num=3, 1.3°
+            (3, 0, make_radial(0.0, 1.3, 0)),   // start elev
+            (3, 0, make_radial(1.0, 1.3, 1)),
+            (3, 0, make_radial(2.0, 1.3, 4)),   // end volume
+        ];
+
+        let sweeps = Level2File::split_radials_into_sweeps(radials);
+        assert_eq!(sweeps.len(), 3);
+        assert_eq!(sweeps[0].elevation_number, 1);
+        assert_eq!(sweeps[1].elevation_number, 2);
+        assert_eq!(sweeps[2].elevation_number, 3);
+        assert_eq!(sweeps[0].radials.len(), 3);
+        assert_eq!(sweeps[1].radials.len(), 3);
+        assert_eq!(sweeps[2].radials.len(), 3);
+        // Verify sweep_index
+        assert_eq!(sweeps[0].sweep_index, 0);
+        assert_eq!(sweeps[1].sweep_index, 1);
+        assert_eq!(sweeps[2].sweep_index, 2);
+        // Verify start/end status
+        assert_eq!(sweeps[0].start_status, 3);
+        assert_eq!(sweeps[0].end_status, 2);
+        assert_eq!(sweeps[2].end_status, 4);
+    }
+
+    #[test]
+    fn test_sails_duplicate_cuts_split() {
+        // SAILS: tilt 1 (0.5°), tilt 2 (0.9°), SAILS repeat of tilt 1 (0.5°), tilt 3 (1.3°)
+        let radials = vec![
+            // First 0.5° pass: elev_num=1
+            (1, 0, make_radial(0.0, 0.5, 3)),
+            (1, 0, make_radial(1.0, 0.5, 1)),
+            (1, 0, make_radial(2.0, 0.5, 2)),
+            // 0.9°: elev_num=2
+            (2, 0, make_radial(0.0, 0.9, 0)),
+            (2, 0, make_radial(1.0, 0.9, 1)),
+            (2, 0, make_radial(2.0, 0.9, 2)),
+            // SAILS repeat 0.5°: elev_num=1 again
+            (1, 0, make_radial(0.0, 0.5, 0)),
+            (1, 0, make_radial(1.0, 0.5, 1)),
+            (1, 0, make_radial(2.0, 0.5, 2)),
+            // 1.3°: elev_num=3
+            (3, 0, make_radial(0.0, 1.3, 0)),
+            (3, 0, make_radial(1.0, 1.3, 1)),
+            (3, 0, make_radial(2.0, 1.3, 4)),
+        ];
+
+        let sweeps = Level2File::split_radials_into_sweeps(radials);
+        assert_eq!(sweeps.len(), 4, "SAILS repeat should produce 4 sweeps, not 3");
+        assert_eq!(sweeps[0].elevation_number, 1);
+        assert_eq!(sweeps[1].elevation_number, 2);
+        assert_eq!(sweeps[2].elevation_number, 1); // SAILS repeat
+        assert_eq!(sweeps[3].elevation_number, 3);
+        assert_eq!(sweeps[2].radials.len(), 3);
+    }
+
+    #[test]
+    fn test_status_5_starts_new_sweep() {
+        // Status 5 (start elev mid-volume) should also split
+        let radials = vec![
+            (1, 0, make_radial(0.0, 0.5, 3)),
+            (1, 0, make_radial(1.0, 0.5, 1)),
+            (1, 0, make_radial(2.0, 0.5, 2)),
+            // Status 5 sweep start
+            (2, 0, make_radial(0.0, 0.9, 5)),
+            (2, 0, make_radial(1.0, 0.9, 1)),
+            (2, 0, make_radial(2.0, 0.9, 2)),
+        ];
+
+        let sweeps = Level2File::split_radials_into_sweeps(radials);
+        assert_eq!(sweeps.len(), 2);
+        assert_eq!(sweeps[1].start_status, 5);
+    }
+
+    #[test]
+    fn test_elevation_change_fallback_without_status_marker() {
+        // If status markers are missing (all status=1), elevation_number change splits
+        let radials = vec![
+            (1, 0, make_radial(0.0, 0.5, 1)),
+            (1, 0, make_radial(1.0, 0.5, 1)),
+            (2, 0, make_radial(0.0, 0.9, 1)),  // elev change but no status marker
+            (2, 0, make_radial(1.0, 0.9, 1)),
+        ];
+
+        let sweeps = Level2File::split_radials_into_sweeps(radials);
+        assert_eq!(sweeps.len(), 2, "elevation_number change should split even without status marker");
+        assert_eq!(sweeps[0].elevation_number, 1);
+        assert_eq!(sweeps[1].elevation_number, 2);
+    }
+
+    #[test]
+    fn test_cut_sector_preserved() {
+        let radials = vec![
+            (1, 3, make_radial(0.0, 0.5, 3)),
+            (1, 3, make_radial(1.0, 0.5, 2)),
+        ];
+
+        let sweeps = Level2File::split_radials_into_sweeps(radials);
+        assert_eq!(sweeps[0].cut_sector, 3);
+    }
+
+    #[test]
+    fn test_incomplete_sweep_end_status() {
+        // Single radial, no end marker — end_status reflects last radial's actual status
+        let radials = vec![
+            (1, 0, make_radial(0.0, 0.5, 3)),
+        ];
+
+        let sweeps = Level2File::split_radials_into_sweeps(radials);
+        assert_eq!(sweeps.len(), 1);
+        assert_eq!(sweeps[0].start_status, 3);
+        // Not 2 or 4, so consumers know this cut didn't end cleanly
+        assert_eq!(sweeps[0].end_status, 3);
     }
 }

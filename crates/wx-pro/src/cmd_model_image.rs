@@ -29,6 +29,9 @@ pub fn run(
     level: &str,
     fhour: u32,
     raw: bool,
+    ansi: bool,
+    ansi_width: u32,
+    ansi_mode: &str,
     pretty: bool,
 ) {
     let model_lower = model.to_lowercase();
@@ -162,6 +165,13 @@ pub fn run(
     }
 
     let render_ms = render_start.elapsed().as_millis();
+
+    // ANSI terminal output
+    if ansi {
+        let mode = rustmet_core::render::ansi::AnsiMode::from_str(ansi_mode);
+        let ansi_str = rustmet_core::render::ansi::rgba_to_ansi_mode(&pixels, nx as u32, ny as u32, ansi_width, mode);
+        eprint!("{}", ansi_str);
+    }
 
     // Save PNG
     let now = chrono::Utc::now();

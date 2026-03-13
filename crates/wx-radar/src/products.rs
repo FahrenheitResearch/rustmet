@@ -32,6 +32,8 @@ pub enum RadarProduct {
     EchoTops,
     /// Hydrometeor classification.
     HydrometeorClassification,
+    /// Unknown or unrecognized moment type.
+    Unknown,
 }
 
 impl RadarProduct {
@@ -46,7 +48,7 @@ impl RadarProduct {
             "PHI" => Self::DifferentialPhase,
             "KDP" => Self::SpecificDifferentialPhase,
             "HHC" | "HCA" => Self::HydrometeorClassification,
-            _ => Self::Reflectivity, // fallback
+            _ => Self::Unknown,
         }
     }
 
@@ -82,6 +84,7 @@ impl RadarProduct {
             Self::VIL => "Vertically Integrated Liquid",
             Self::EchoTops => "Echo Tops",
             Self::HydrometeorClassification => "Hydrometeor Classification",
+            Self::Unknown => "Unknown",
         }
     }
 
@@ -100,6 +103,7 @@ impl RadarProduct {
             Self::VIL => "VIL",
             Self::EchoTops => "ET",
             Self::HydrometeorClassification => "HCA",
+            Self::Unknown => "UNK",
         }
     }
 
@@ -118,6 +122,7 @@ impl RadarProduct {
             Self::VIL => "kg/m^2",
             Self::EchoTops => "km",
             Self::HydrometeorClassification => "",
+            Self::Unknown => "",
         }
     }
 }

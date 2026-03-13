@@ -29,6 +29,9 @@ pub fn run(
     lat: Option<f64>,
     lon: Option<f64>,
     size: u32,
+    ansi: bool,
+    ansi_width: u32,
+    ansi_mode: &str,
     pretty: bool,
 ) {
     let site_id = if let (Some(la), Some(lo)) = (lat, lon) {
@@ -255,6 +258,13 @@ pub fn run(
     draw_meso_marker(&mut pixels, img_size, 60, img_size as i32 - 20);
     draw_text(&mut pixels, img_size, 68, img_size as i32 - 24, "Meso", (255, 80, 80));
 
+    // ANSI terminal output
+    if ansi {
+        let mode = rustmet_core::render::ansi::AnsiMode::from_str(ansi_mode);
+        let ansi_str = rustmet_core::render::ansi::rgba_to_ansi_mode(&pixels, ppi.size, ppi.size, ansi_width, mode);
+        eprint!("{}", ansi_str);
+    }
+
     // Save
     let ts = now.format("%Y%m%d_%H%M%S").to_string();
     let out_path = image_dir().join(format!("{}_STORM_{}.png", site_id, ts));
@@ -340,11 +350,18 @@ fn detect_mesos_for_overlay(l2: &Level2File) -> Vec<OverlayMeso> {
         .map(|(i, s)| (i, s.elevation_angle))
         .collect();
     sweep_elevs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    // Deduplicate SAILS/MESO-SAILS: keep only unique elevations (>0.3° apart)
+    let mut unique_elevs: Vec<(usize, f32)> = Vec::new();
+    for &(idx, elev) in &sweep_elevs {
+        if unique_elevs.last().map_or(true, |&(_, prev)| (elev - prev).abs() > 0.3) {
+            unique_elevs.push((idx, elev));
+        }
+    }
 
     // Phase 1: Scan each sweep independently, cluster per-sweep
     let mut per_sweep_clusters: Vec<Vec<OverlayMeso>> = Vec::new();
 
-    for &(si, _) in sweep_elevs.iter().take(4) {
+    for &(si, _) in unique_elevs.iter().take(4) {
         let sweep = &l2.sweeps[si];
         let n = sweep.radials.len();
         if n < 3 {

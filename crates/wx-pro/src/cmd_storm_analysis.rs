@@ -284,19 +284,32 @@ fn run_rotation_on_volume(l2: &wx_radar::level2::Level2File) -> Vec<MesoDetectio
     const TVS_THRESHOLD: f32 = 46.0;
     const STRENGTH_THRESHOLDS: [f32; 5] = [15.0, 25.0, 33.0, 46.0, 60.0];
 
-    let mut all_detections = Vec::new();
+    const MIN_VERTICAL_TILTS: usize = 3;
+    const MAX_HORIZ_OFFSET_KM: f64 = 10.0;
+    const MIN_CLUSTER_GATES: usize = 3;
 
-    // Scan lowest 4 elevations
+    // Scan lowest 4 unique elevations (deduplicate SAILS)
     let mut sweep_elevs: Vec<(usize, f32)> = l2.sweeps.iter()
         .enumerate()
         .map(|(i, s)| (i, s.elevation_angle))
         .collect();
     sweep_elevs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut unique_elevs: Vec<(usize, f32)> = Vec::new();
+    for &(idx, elev) in &sweep_elevs {
+        if unique_elevs.last().map_or(true, |&(_, prev)| (elev - prev).abs() > 0.3) {
+            unique_elevs.push((idx, elev));
+        }
+    }
+    let low_sweeps: Vec<(usize, f32)> = unique_elevs.into_iter().take(4).collect();
 
-    for &(si, _) in sweep_elevs.iter().take(4) {
+    // Phase 1: Per-sweep independent scanning
+    let mut per_sweep_detections: Vec<Vec<MesoDetection>> = Vec::new();
+
+    for &(si, _) in &low_sweeps {
         let sweep = &l2.sweeps[si];
         let n = sweep.radials.len();
         if n < 3 { continue; }
+        let mut all_detections: Vec<MesoDetection> = Vec::new();
 
         // Build ref lookup
         let ref_data: Vec<Vec<f32>> = sweep.radials.iter().map(|r| {
@@ -378,34 +391,87 @@ fn run_rotation_on_volume(l2: &wx_radar::level2::Level2File) -> Vec<MesoDetectio
                 }
             }
         }
+
+        // Cluster this sweep's detections: merge within 2°/0.75km
+        let mut sweep_clustered: Vec<MesoDetection> = Vec::new();
+        'cluster: for det in &all_detections {
+            for existing in &mut sweep_clustered {
+                let az_diff = {
+                    let d = (det.azimuth - existing.azimuth).abs();
+                    if d > 180.0 { 360.0 - d } else { d }
+                };
+                let range_diff = (det.range_km - existing.range_km).abs();
+                if az_diff < 2.0 && range_diff < 0.75 {
+                    if det.rotational_velocity > existing.rotational_velocity {
+                        existing.rotational_velocity = det.rotational_velocity;
+                        existing.max_shear = det.max_shear;
+                        existing.strength_rank = det.strength_rank;
+                    }
+                    continue 'cluster;
+                }
+            }
+            sweep_clustered.push(MesoDetection {
+                azimuth: det.azimuth,
+                range_km: det.range_km,
+                rotational_velocity: det.rotational_velocity,
+                max_shear: det.max_shear,
+                strength_rank: det.strength_rank,
+            });
+        }
+        // Only keep clusters with enough gates
+        let sweep_filtered: Vec<MesoDetection> = sweep_clustered;
+        per_sweep_detections.push(sweep_filtered);
     }
 
-    // Simple spatial clustering: deduplicate by keeping strongest within 5km / 3°
+    // Phase 2: Vertical continuity — require MIN_VERTICAL_TILTS
     let mut final_mesos: Vec<MesoDetection> = Vec::new();
-    'outer: for det in &all_detections {
-        for existing in &mut final_mesos {
-            let az_diff = {
-                let d = (det.azimuth - existing.azimuth).abs();
-                if d > 180.0 { 360.0 - d } else { d }
-            };
-            let range_diff = (det.range_km - existing.range_km).abs();
-            if az_diff < 3.0 && range_diff < 5.0 {
-                // Merge: keep strongest
-                if det.rotational_velocity > existing.rotational_velocity {
-                    existing.rotational_velocity = det.rotational_velocity;
-                    existing.max_shear = det.max_shear;
-                    existing.strength_rank = det.strength_rank;
+
+    if let Some(base_dets) = per_sweep_detections.first() {
+        for base in base_dets {
+            let bx = (base.azimuth as f64).to_radians().sin() * base.range_km as f64;
+            let by = (base.azimuth as f64).to_radians().cos() * base.range_km as f64;
+            let mut tilt_count = 1usize;
+            let mut best_rot = base.rotational_velocity;
+            let mut best_shear = base.max_shear;
+
+            for sweep_dets in per_sweep_detections.iter().skip(1) {
+                let mut closest_dist = MAX_HORIZ_OFFSET_KM;
+                let mut closest_det: Option<&MesoDetection> = None;
+                for det in sweep_dets {
+                    let dx = (det.azimuth as f64).to_radians().sin() * det.range_km as f64;
+                    let dy = (det.azimuth as f64).to_radians().cos() * det.range_km as f64;
+                    let dist = ((bx - dx).powi(2) + (by - dy).powi(2)).sqrt();
+                    if dist < closest_dist {
+                        closest_dist = dist;
+                        closest_det = Some(det);
+                    }
                 }
-                continue 'outer;
+                if let Some(det) = closest_det {
+                    tilt_count += 1;
+                    if det.rotational_velocity > best_rot {
+                        best_rot = det.rotational_velocity;
+                    }
+                    if det.max_shear > best_shear {
+                        best_shear = det.max_shear;
+                    }
+                }
+            }
+
+            if tilt_count >= MIN_VERTICAL_TILTS {
+                let strength = if best_rot >= STRENGTH_THRESHOLDS[4] { 5 }
+                    else if best_rot >= STRENGTH_THRESHOLDS[3] { 4 }
+                    else if best_rot >= STRENGTH_THRESHOLDS[2] { 3 }
+                    else if best_rot >= STRENGTH_THRESHOLDS[1] { 2 }
+                    else { 1 };
+                final_mesos.push(MesoDetection {
+                    azimuth: base.azimuth,
+                    range_km: base.range_km,
+                    rotational_velocity: best_rot,
+                    max_shear: best_shear,
+                    strength_rank: strength,
+                });
             }
         }
-        final_mesos.push(MesoDetection {
-            azimuth: det.azimuth,
-            range_km: det.range_km,
-            rotational_velocity: det.rotational_velocity,
-            max_shear: det.max_shear,
-            strength_rank: det.strength_rank,
-        });
     }
 
     let _ = TVS_THRESHOLD; // used for classification if needed

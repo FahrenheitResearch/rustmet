@@ -302,6 +302,15 @@ enum Commands {
         /// Raw data layer only — no basemap, no overlays (for map tile compositing)
         #[arg(long)]
         raw: bool,
+        /// Print ANSI truecolor art to terminal
+        #[arg(long)]
+        ansi: bool,
+        /// ANSI art width in characters (default: 120)
+        #[arg(long, default_value = "120")]
+        ansi_width: u32,
+        /// ANSI rendering mode: half (fast) or block (img2ansi-style, higher quality)
+        #[arg(long, default_value = "half")]
+        ansi_mode: String,
     },
 
     /// Render a model field (HRRR/GFS/etc) as a PNG image
@@ -322,6 +331,15 @@ enum Commands {
         /// Raw data layer only — no basemap, no overlays (for map tile compositing)
         #[arg(long)]
         raw: bool,
+        /// Print ANSI truecolor art to terminal
+        #[arg(long)]
+        ansi: bool,
+        /// ANSI art width in characters (default: 120)
+        #[arg(long, default_value = "120")]
+        ansi_width: u32,
+        /// ANSI rendering mode: half (fast) or block (img2ansi-style, higher quality)
+        #[arg(long, default_value = "half")]
+        ansi_mode: String,
     },
 
     /// Time series of a model variable at a point (forecast evolution + event detection)
@@ -453,6 +471,15 @@ enum Commands {
         /// Image size in pixels (default: 800)
         #[arg(long, default_value = "800")]
         size: u32,
+        /// Print ANSI truecolor art to terminal
+        #[arg(long)]
+        ansi: bool,
+        /// ANSI art width in characters (default: 120)
+        #[arg(long, default_value = "120")]
+        ansi_width: u32,
+        /// ANSI rendering mode: half (fast) or block (img2ansi-style, higher quality)
+        #[arg(long, default_value = "half")]
+        ansi_mode: String,
     },
 
     /// Describe all commands for agent discovery
@@ -514,11 +541,11 @@ fn main() {
         Commands::WatchBox { lat, lon, radius_km, interval_sec, threshold_dbz } => {
             cmd_watch_box::run(lat, lon, radius_km, interval_sec, threshold_dbz, pretty);
         }
-        Commands::RadarImage { site, lat, lon, product, size, raw } => {
-            cmd_radar_image::run(&site, lat, lon, &product, size, raw, pretty);
+        Commands::RadarImage { site, lat, lon, product, size, raw, ansi, ansi_width, ansi_mode } => {
+            cmd_radar_image::run(&site, lat, lon, &product, size, raw, ansi, ansi_width, &ansi_mode, pretty);
         }
-        Commands::ModelImage { model, var, level, fhour, raw } => {
-            cmd_model_image::run(&model, &var, &level, fhour, raw, pretty);
+        Commands::ModelImage { model, var, level, fhour, raw, ansi, ansi_width, ansi_mode } => {
+            cmd_model_image::run(&model, &var, &level, fhour, raw, ansi, ansi_width, &ansi_mode, pretty);
         }
         Commands::Timeseries { lat, lon, var, level, model, hours } => {
             cmd_timeseries::run(lat, lon, &var, &level, &model, hours, pretty);
@@ -535,8 +562,8 @@ fn main() {
         Commands::StormAnalysis { site, lat, lon, frames } => {
             cmd_storm_analysis::run(&site, lat, lon, frames, pretty);
         }
-        Commands::StormImage { site, lat, lon, size } => {
-            cmd_storm_image::run(&site, lat, lon, size, pretty);
+        Commands::StormImage { site, lat, lon, size, ansi, ansi_width, ansi_mode } => {
+            cmd_storm_image::run(&site, lat, lon, size, ansi, ansi_width, &ansi_mode, pretty);
         }
         Commands::AgentHelp => cmd_help::run(pretty),
     }

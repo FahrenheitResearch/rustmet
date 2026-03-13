@@ -14,7 +14,7 @@ Pre-built binaries for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Win
 | Binary | Size | Description |
 |--------|------|-------------|
 | **wx** | 4.0 MB | Weather CLI — 17 commands, JSON output for agent pipelines |
-| **wx-pro** | 6.0 MB | Full-power CLI — 23 commands including MRMS composites, rotation detection, storm cell tracking, imagery rendering, watch-box geometry |
+| **wx-pro** | 6.0 MB | Full-power CLI — 27 commands including MRMS composites, rotation detection, storm cell tracking, imagery rendering with ANSI terminal art, watch-box geometry |
 | **wx-lite** | 3.6 MB | Bandwidth-optimized CLI — 12 commands, response caching, Open-Meteo global coverage |
 | **wx-mcp** | 694 KB | MCP server — exposes 22 weather tools over stdio for Claude, Hermes, or any MCP client |
 | **wx-server** | 5.8 MB | HTTP tile server — Axum-based REST API with in-process GRIB2 rendering, SSE streaming, and a self-contained web dashboard |
@@ -72,6 +72,7 @@ rustmet-core is the foundation crate used by all binaries. It provides:
 - Skew-T / Log-P sounding diagrams
 - NEXRAD polar-to-cartesian radar rendering
 - Near-range radar quality control (10 km minimum range, elevation filtering, spatial consistency checks)
+- ANSI truecolor terminal art — half-block (fast) and img2ansi-style quadrant block renderer with Floyd-Steinberg error diffusion and Redmean perceptual color distance
 
 ## NEXRAD Radar
 
@@ -80,9 +81,10 @@ The `wx-radar` crate parses NEXRAD WSR-88D Level 2 archive files:
 - All 6 dual-pol products: REF, VEL, SW, ZDR, RHO (CC), PHI (KDP)
 - 141 operational radar sites with metadata (lat/lon, name, region)
 - BZ2 decompression of compressed volume scans
+- SAILS/MESO-SAILS cut-boundary-aware sweep splitting (radial_status + elevation_number fallback)
 - Polar-to-cartesian tile rendering for XYZ map overlays
 - Quality-controlled max reflectivity and gate-to-gate velocity analysis
-- Rotation detection type definitions for mesocyclone identification
+- MDA-style rotation detection: cyclonic-only azimuthal shear, union-find clustering, 3-tilt vertical continuity
 - SCIT-style storm cell identification with multi-threshold watershed segmentation
 - Cell tracking across volume scans with motion vector computation
 
@@ -285,7 +287,7 @@ rustmet/
 │   ├── rustmet-core/     # GRIB2 parser, download client, model configs, colormaps
 │   ├── rustmet-py/       # Python bindings (PyO3 + maturin)
 │   ├── wx-agent/         # wx CLI binary (17 commands)
-│   ├── wx-pro/           # wx-pro CLI binary (23 commands)
+│   ├── wx-pro/           # wx-pro CLI binary (27 commands)
 │   ├── wx-lite/          # wx-lite CLI binary (12 commands)
 │   ├── wx-mcp/           # MCP server binary (22 tools)
 │   ├── wx-server/        # HTTP tile server binary

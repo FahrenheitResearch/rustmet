@@ -77,7 +77,14 @@ pub fn run(site: &str, lat: Option<f64>, lon: Option<f64>, pretty: bool) {
         .map(|(i, s)| (i, s.elevation_angle))
         .collect();
     sweep_elevations.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-    let low_sweep_indices: Vec<usize> = sweep_elevations.iter()
+    // Deduplicate SAILS/MESO-SAILS: keep only unique elevations (>0.3° apart)
+    let mut unique_elevations: Vec<(usize, f32)> = Vec::new();
+    for &(idx, elev) in &sweep_elevations {
+        if unique_elevations.last().map_or(true, |&(_, prev_elev)| (elev - prev_elev).abs() > 0.3) {
+            unique_elevations.push((idx, elev));
+        }
+    }
+    let low_sweep_indices: Vec<usize> = unique_elevations.iter()
         .take(NUM_LOW_ELEVATIONS)
         .map(|(i, _)| *i)
         .collect();

@@ -15,6 +15,7 @@ pub mod contour;
 pub mod filled_contour;
 pub mod overlay;
 pub mod encode;
+pub mod ansi;
 pub mod skewt;
 pub mod hodograph;
 pub mod station;
@@ -49,6 +50,9 @@ pub use overlay::{overlay_contours, overlay_wind_barbs, overlay_streamlines};
 
 // encode
 pub use encode::{write_png, encode_png};
+
+// ansi
+pub use ansi::{rgba_to_ansi, rgba_to_ansi_mode, AnsiMode};
 
 // skewt
 pub use skewt::{SkewTConfig, SkewTData, render_skewt};

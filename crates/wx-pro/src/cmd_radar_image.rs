@@ -33,6 +33,9 @@ pub fn run(
     product: &str,
     size: u32,
     raw: bool,
+    ansi: bool,
+    ansi_width: u32,
+    ansi_mode: &str,
     pretty: bool,
 ) {
     // Resolve site
@@ -167,6 +170,13 @@ pub fn run(
                 }
             }
         }
+    }
+
+    // ANSI terminal output
+    if ansi {
+        let mode = rustmet_core::render::ansi::AnsiMode::from_str(ansi_mode);
+        let ansi_str = rustmet_core::render::ansi::rgba_to_ansi_mode(&pixels, ppi.size, ppi.size, ansi_width, mode);
+        eprint!("{}", ansi_str);
     }
 
     // Save PNG
